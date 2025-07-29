@@ -7,9 +7,13 @@ import {
   LogOut,
   Crown,
   Target,
-  Timer
+  Timer,
+  Star,
+  Wallet
 } from 'lucide-react';
 import { useMultiplayer } from '../context/MultiplayerContext';
+import { useUser } from '../context/UserContext';
+import UserRegistrationModal from './UserRegistrationmodal';
 
 const MultiplayerGame = () => {
   const { 
@@ -27,11 +31,16 @@ const MultiplayerGame = () => {
     roundStartCountdown
   } = useMultiplayer();
 
-  const [playerName, setPlayerName] = useState('');
-  const [showNameInput, setShowNameInput] = useState(false);
+  const { currentUser, isRegistered } = useUser();
+
+  const [showRegistration, setShowRegistration] = useState(false);
   const [selectedAnswer, setSelectedAnswer] = useState(null);
   const [hasAnswered, setHasAnswered] = useState(false);
   const [startTime, setStartTime] = useState(null);
+  
+  // Added missing state variables
+  const [showNameInput, setShowNameInput] = useState(false);
+  const [playerName, setPlayerName] = useState('');
 
   useEffect(() => {
     setSelectedAnswer(null);
@@ -39,20 +48,7 @@ const MultiplayerGame = () => {
     setStartTime(Date.now());
   }, [currentQuestion]);
 
-  const handleJoinRound = async () => {
-    if (showNameInput && playerName.trim()) {
-      try {
-        await joinRound(playerName.trim());
-        setShowNameInput(false);
-        setPlayerName(''); // Clear name after joining
-      } catch (error) {
-        console.error('Error joining round:', error);
-      }
-    } else {
-      setShowNameInput(true);
-    }
-  };
-
+  // Added missing handler functions
   const handleNameChange = (e) => {
     setPlayerName(e.target.value);
   };
@@ -61,6 +57,23 @@ const MultiplayerGame = () => {
     if (e.key === 'Enter' && playerName.trim()) {
       handleJoinRound();
     }
+  };
+
+  const handleJoinRound = async () => {
+    try {
+      // Use the current user's username since they're now guaranteed to be logged in
+      const nameToUse = currentUser?.username || playerName.trim();
+      await joinRound(nameToUse);
+      setShowNameInput(false);
+      setPlayerName('');
+    } catch (error) {
+      console.error('Error joining round:', error);
+    }
+  };
+
+  const handleRegistrationSuccess = () => {
+    setShowRegistration(false);
+    // User just registered, component will re-render and show multiplayer content
   };
 
   const handleAnswer = async (answerIndex) => {
@@ -88,6 +101,34 @@ const MultiplayerGame = () => {
       return `${baseClass} bg-gray-700 border-2 border-gray-600 text-gray-400`;
     }
   };
+
+  // Check if user is logged in - if not, show login prompt
+  if (!isRegistered()) {
+    return (
+      <div className="bg-gray-800/40 backdrop-blur-sm rounded-2xl p-8 border border-gray-700 text-center">
+        <Users className="w-16 h-16 mx-auto mb-4 text-yellow-400" />
+        <h2 className="font-bebas text-3xl text-yellow-400 mb-4">LOGIN REQUIRED</h2>
+        <p className="font-space text-gray-300 mb-6">
+          You need to create an account and login to access multiplayer games.
+        </p>
+        <button
+          onClick={() => setShowRegistration(true)}
+          className="font-bebas bg-yellow-400 text-gray-900 py-3 px-8 rounded-xl hover:bg-yellow-300 transition-all transform hover:scale-105 flex items-center gap-2 mx-auto"
+        >
+          <Users className="w-5 h-5" />
+          CREATE ACCOUNT & LOGIN
+        </button>
+        
+        {/* Registration Modal */}
+        {showRegistration && (
+          <UserRegistrationModal
+            onClose={() => setShowRegistration(false)}
+            onRegistrationSuccess={() => setShowRegistration(false)}
+          />
+        )}
+      </div>
+    );
+  }
 
   if (!activeRound) {
     return (
@@ -176,7 +217,7 @@ const MultiplayerGame = () => {
               </div>
             ) : (
               <button
-                onClick={handleJoinRound}
+                onClick={() => setShowNameInput(true)}
                 disabled={loading}
                 className="font-bebas bg-yellow-400 text-gray-900 py-3 px-8 rounded-xl hover:bg-yellow-300 transition-all transform hover:scale-105 flex items-center gap-2 mx-auto"
               >
@@ -214,6 +255,14 @@ const MultiplayerGame = () => {
               ))}
             </div>
           </div>
+        )}
+
+        {/* Registration Modal */}
+        {showRegistration && (
+          <UserRegistrationModal
+            onClose={() => setShowRegistration(false)}
+            onRegistrationSuccess={handleRegistrationSuccess}
+          />
         )}
       </div>
     );
