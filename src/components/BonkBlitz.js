@@ -4,16 +4,39 @@ import { useGame } from '../context/GameContext';
 import MultiplayerGame from './MultiplayerGame';
 import { useMultiplayer } from '../context/MultiplayerContext';
 
+// BONK Character Component
+const BonkCharacter = ({ imageFile, position, className = "", animate = false, gameState = 'idle' }) => {
+  return (
+    <div 
+      className={`fixed ${position} ${className} ${animate ? 'bonk-bounce' : ''} transition-all duration-500 z-10 pointer-events-none`}
+      style={{ 
+        filter: 'drop-shadow(4px 4px 8px rgba(0,0,0,0.4))',
+        transform: animate ? 'scale(1.1)' : 'scale(1)'
+      }}
+    >
+      <img 
+        src={`/${imageFile}`}
+        alt="BONK Character" 
+        className="w-32 h-32 md:w-40 md:h-40 lg:w-48 lg:h-48 xl:w-56 xl:h-56"
+        style={{ 
+          imageRendering: 'auto',
+          animation: gameState === 'correct' ? 'bonkBounce 1s ease-in-out' : 
+                    gameState === 'wrong' ? 'bonkPulse 0.5s ease-in-out' : 'none'
+        }}
+      />
+    </div>
+  );
+};
+
 // Multiplayer Section Component
 const MultiplayerSection = () => {
   const { activeRound } = useMultiplayer();
 
-  // Only show if there's an active round
   if (!activeRound) return null;
 
   return (
     <div className="mb-8">
-      <h2 className="font-bebas text-3xl text-yellow-400 mb-4 text-center">
+      <h2 className="bonk-header text-3xl mb-4 text-center bonk-glow">
         🔥 {activeRound.name || 'LIVE MULTIPLAYER ROUND'} 🔥
       </h2>
       <MultiplayerGame />
@@ -35,6 +58,7 @@ const BonkBlitz = () => {
   const [questionTimeLeft, setQuestionTimeLeft] = useState(5);
   const [gameQuestions, setGameQuestions] = useState([]);
   const [gameStartTime, setGameStartTime] = useState(null);
+  const [characterState, setCharacterState] = useState('idle');
 
   // Refs for timers
   const timerRef = useRef(null);
@@ -68,10 +92,14 @@ const BonkBlitz = () => {
     setIsAnswered(false);
     setSelectedAnswer(null);
     setGameStartTime(Date.now());
+    setCharacterState('playing');
     actions.startGame();
+    
+    // Reset character state after animation
+    setTimeout(() => setCharacterState('idle'), 2000);
   }, [shuffleQuestions, actions]);
 
-  // Answer selection with real data tracking
+  // Answer selection with real data tracking and character reactions
   const selectAnswer = useCallback((answerIndex) => {
     if (isAnswered || !currentQuestionData) return;
     
@@ -83,6 +111,10 @@ const BonkBlitz = () => {
     // Track question analytics
     actions.questionAsked(currentQuestionData.id);
     actions.questionAnswered(currentQuestionData.id, isCorrect);
+    
+    // Character reaction
+    setCharacterState(isCorrect ? 'correct' : 'wrong');
+    setTimeout(() => setCharacterState('idle'), 2000);
     
     if (isCorrect) {
       const timeBonus = questionTimeLeft * 100;
@@ -102,6 +134,8 @@ const BonkBlitz = () => {
       setQuestionTimeLeft(5);
       setIsAnswered(false);
       setSelectedAnswer(null);
+      setCharacterState('playing');
+      setTimeout(() => setCharacterState('idle'), 1000);
     } else {
       endGame();
     }
@@ -122,6 +156,7 @@ const BonkBlitz = () => {
     });
     
     setGameState('finished');
+    setCharacterState('finished');
   }, [gameStartTime, currentQuestionIndex, isAnswered, score, streak, actions]);
 
   // Reset game
@@ -138,6 +173,7 @@ const BonkBlitz = () => {
     setIsAnswered(false);
     setQuestionTimeLeft(5);
     setGameQuestions([]);
+    setCharacterState('idle');
   }, []);
 
   // Timer effects
@@ -175,7 +211,6 @@ const BonkBlitz = () => {
 
   // Memoized computed values
   const formattedScore = useMemo(() => score.toLocaleString(), [score]);
-  const formattedPrizePool = useMemo(() => state.gameStats.currentPrizePool.toFixed(3), [state.gameStats.currentPrizePool]);
   const questionProgress = useMemo(() => `${currentQuestionIndex + 1} / ${gameQuestions.length}`, [currentQuestionIndex, gameQuestions.length]);
   const accuracy = useMemo(() => gameQuestions.length > 0 ? Math.round((score / 1000) * 100 / gameQuestions.length) : 0, [score, gameQuestions.length]);
   const finalRank = useMemo(() => Math.floor(Math.random() * 10) + 1, []);
@@ -183,12 +218,12 @@ const BonkBlitz = () => {
   // Show loading if no questions available
   if (activeQuestions.length === 0) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white overflow-x-hidden">
+      <div className="min-h-screen text-white overflow-x-hidden bg-bonk-gradient">
         <div className="flex items-center justify-center min-h-screen">
-          <div className="text-center">
-            <Zap className="w-16 h-16 mx-auto mb-4 animate-pulse text-yellow-400" />
-            <h2 className="font-bebas text-2xl mb-2 text-yellow-400">LOADING QUESTIONS...</h2>
-            <p className="font-space text-gray-300">Please wait while we prepare your trivia experience!</p>
+          <div className="text-center bonk-widget p-8">
+            <Zap className="w-16 h-16 mx-auto mb-4 bonk-pulse text-bonk-orange" />
+            <h2 className="bonk-header text-2xl mb-2">LOADING QUESTIONS...</h2>
+            <p className="bonk-body text-gray-300">Please wait while we prepare your trivia experience!</p>
           </div>
         </div>
       </div>
@@ -196,116 +231,164 @@ const BonkBlitz = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white overflow-x-hidden">
-      <style jsx>{`
-        @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Grotesk:wght@400;700&display=swap');
-        
-        .font-bebas {
-          font-family: 'Bebas Neue', cursive;
-          letter-spacing: 0.05em;
-        }
-        
-        .font-space {
-          font-family: 'Space Grotesk', sans-serif;
-        }
-        
-        .glow-yellow {
-          box-shadow: 0 0 20px rgba(250, 204, 21, 0.5), 0 0 40px rgba(250, 204, 21, 0.3);
-        }
-        
-        .text-glow {
-          text-shadow: 0 0 10px rgba(250, 204, 21, 0.8), 0 0 20px rgba(250, 204, 21, 0.5);
-        }
-        
-        @keyframes float {
-          0%, 100% { transform: translateY(0px); }
-          50% { transform: translateY(-10px); }
-        }
-        
-        .float-animation {
-          animation: float 3s ease-in-out infinite;
-        }
-      `}</style>
-
-      {/* Header */}
-      <header className="relative z-10">
-        <div className="absolute inset-0 bg-gradient-to-b from-yellow-400/20 to-transparent"></div>
-        <div className="relative flex flex-col sm:flex-row justify-between items-center p-4 sm:p-6 gap-4">
-          <div className="flex items-center space-x-3">
-            <div className="relative">
-              <Zap className="w-10 h-10 text-yellow-400 animate-pulse" />
-              <div className="absolute inset-0 w-10 h-10 bg-yellow-400/30 rounded-full animate-ping"></div>
-            </div>
-            <h1 className="font-bebas text-4xl sm:text-5xl text-yellow-400 text-glow">
-              BONK BLITZ
-            </h1>
-          </div>
+    <div className="min-h-screen text-white overflow-x-hidden bg-bonk-gradient relative">
+      {/* BONK Characters - Only show during offline game states */}
+      {!state.liveGame.isActive && (
+        <>
+          {/* Left BONK Character */}
+          <BonkCharacter 
+            imageFile="BONK_Pose_ThumbsUp_001.png"
+            position="left-4 top-1/2 transform -translate-y-1/2" 
+            className="hidden xl:block"
+            animate={characterState === 'correct' || characterState === 'playing'}
+            gameState={characterState}
+          />
           
-          <div className="flex flex-wrap items-center gap-3 sm:gap-4">
-            <div className="flex items-center space-x-2 bg-gray-800/80 backdrop-blur-sm px-4 py-2 rounded-lg border border-yellow-400/30">
-              <Users className="w-5 h-5 text-yellow-400" />
-              <span className="font-space font-bold text-sm sm:text-base">{state.liveGame.currentPlayers} Players</span>
-            </div>
-            <div className="flex items-center space-x-2 bg-gray-800/80 backdrop-blur-sm px-4 py-2 rounded-lg border border-yellow-400/30">
-              <Coins className="w-5 h-5 text-yellow-400" />
-              <span className="font-space font-bold text-sm sm:text-base">{formattedPrizePool} SOL</span>
-            </div>
-            <div className="bg-yellow-400/20 backdrop-blur-sm px-4 py-2 rounded-lg border border-yellow-400">
-              <span className="text-yellow-400 font-space font-bold text-sm">LIVE NOW</span>
-            </div>
-          </div>
-        </div>
+          {/* Right BONK Character */}
+          <BonkCharacter 
+            imageFile="BONK_Pose_ThumbsUp_002.png"
+            position="right-4 top-1/2 transform -translate-y-1/2" 
+            className="hidden xl:block"
+            animate={characterState === 'correct' || characterState === 'finished'}
+            gameState={characterState}
+          />
+          
+          {/* Smaller characters for medium screens */}
+          <BonkCharacter 
+            imageFile="BONK_Pose_ThumbsUp_001.png"
+            position="left-2 top-1/3" 
+            className="hidden lg:block xl:hidden"
+            animate={characterState === 'correct'}
+            gameState={characterState}
+          />
+          
+          <BonkCharacter 
+            imageFile="BONK_Pose_ThumbsUp_002.png"
+            position="right-2 top-2/3" 
+            className="hidden lg:block xl:hidden"
+            animate={characterState === 'correct'}
+            gameState={characterState}
+          />
+        </>
+      )}
+
+      {/* Header - Clean version without badges */}
+      <header className="relative z-10 pt-20">
+        {/* Empty header space for logo */}
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 min-h-[calc(100vh-100px)]">
-        {/* Multiplayer Section - Shows when there's an active round */}
+      <main className="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 min-h-[calc(100vh-100px)] relative z-20">
+        {/* Multiplayer Section */}
         <MultiplayerSection />
 
         {gameState === 'lobby' && (
           <div className="text-center max-w-4xl w-full">
-            <div className="mb-8 sm:mb-12 float-animation">
-              <h2 className="font-bebas text-6xl sm:text-8xl lg:text-9xl mb-4 text-yellow-400 text-glow">
+            <div className="mb-8 sm:mb-12 bonk-fade-in">
+              <h2 className="bonk-header-spaced text-6xl sm:text-8xl lg:text-9xl mb-4 shadow-bonk-glow">
                 BONK BLITZ
               </h2>
-              <p className="font-space text-xl sm:text-2xl text-gray-300 mb-2">Think Fast, Win SOL</p>
-              <p className="font-space text-base sm:text-lg text-gray-400">60 seconds • Lightning trivia • Epic rewards</p>
+              <p className="bonk-body text-xl sm:text-2xl mb-2">Think Fast, Win Big</p>
+              <p className="bonk-body text-base sm:text-lg opacity-90">60 seconds • Lightning trivia • Epic rewards</p>
             </div>
 
-            <div className="bg-gray-800/60 backdrop-blur-md rounded-2xl p-6 sm:p-8 mb-8 border border-gray-700">
-              <h3 className="font-bebas text-2xl sm:text-3xl mb-6 text-yellow-400">HOW TO PLAY</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
-                <div className="bg-gray-900/80 p-6 rounded-xl border border-gray-700 hover:border-yellow-400/50 transition-colors">
-                  <div className="bg-yellow-400/20 w-16 h-16 rounded-full flex items-center justify-center mb-4 mx-auto">
-                    <Timer className="w-8 h-8 text-yellow-400" />
+            {/* Ultra-Blended How to Play Section */}
+            <div className="relative mb-8">
+              {/* Subtle background enhancement that extends the main gradient */}
+              <div className="absolute inset-0 bg-gradient-to-br from-bonk-orange/8 via-transparent to-bonk-yellow/8 rounded-3xl blur-2xl transform scale-110"></div>
+              <div className="absolute inset-0 bg-gradient-to-tl from-bonk-yellow/5 via-transparent to-bonk-orange/5 rounded-3xl"></div>
+              
+              <div className="relative">
+                <h3 className="bonk-header text-2xl sm:text-3xl mb-8 text-center text-bonk-yellow drop-shadow-lg">HOW TO PLAY</h3>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8">
+                  
+                  {/* Lightning Speed Card - Ultra Blended */}
+                  <div className="group relative overflow-hidden rounded-3xl transition-all duration-700 hover:scale-105 bonk-fade-in">
+                    {/* Multi-layer seamless blending */}
+                    <div className="absolute inset-0 bg-gradient-to-br from-bonk-orange/20 via-bonk-orange/10 to-transparent"></div>
+                    <div className="absolute inset-0 bg-gradient-to-tl from-bonk-yellow/15 via-transparent to-bonk-orange/8"></div>
+                    <div className="absolute inset-0 bg-white/5 backdrop-blur-sm"></div>
+                    
+                    {/* Animated glow effect */}
+                    <div className="absolute inset-0 bg-gradient-to-r from-bonk-orange/40 via-bonk-yellow/30 to-bonk-orange/40 rounded-3xl opacity-0 group-hover:opacity-30 transition-opacity duration-500 blur-xl"></div>
+                    
+                    <div className="relative p-8 text-center">
+                      {/* Glowing icon with multiple layers */}
+                      <div className="relative w-20 h-20 mx-auto mb-6">
+                        <div className="absolute inset-0 bg-bonk-orange/40 rounded-full blur-xl animate-pulse"></div>
+                        <div className="absolute inset-0 bg-gradient-to-br from-bonk-orange/50 to-bonk-orange/20 rounded-full"></div>
+                        <div className="relative bg-gradient-to-br from-bonk-orange/60 via-bonk-orange/40 to-bonk-orange/20 w-20 h-20 rounded-full flex items-center justify-center border-2 border-bonk-orange/50 shadow-2xl">
+                          <Timer className="w-10 h-10 text-white drop-shadow-lg" />
+                        </div>
+                      </div>
+                      
+                      <h4 className="bonk-header text-xl sm:text-2xl mb-3 text-white drop-shadow-lg">LIGHTNING SPEED</h4>
+                      <p className="bonk-body text-sm sm:text-base text-white/95 leading-relaxed">5 seconds per question. Think fast or get left behind!</p>
+                    </div>
                   </div>
-                  <h4 className="font-bebas text-xl mb-2 text-yellow-400">LIGHTNING SPEED</h4>
-                  <p className="font-space text-sm text-gray-300">5 seconds per question. Think fast!</p>
-                </div>
-                <div className="bg-gray-900/80 p-6 rounded-xl border border-gray-700 hover:border-yellow-400/50 transition-colors">
-                  <div className="bg-yellow-400/20 w-16 h-16 rounded-full flex items-center justify-center mb-4 mx-auto">
-                    <Flame className="w-8 h-8 text-yellow-400" />
+
+                  {/* Streak Bonus Card - Ultra Blended */}
+                  <div className="group relative overflow-hidden rounded-3xl transition-all duration-700 hover:scale-105 bonk-fade-in" style={{animationDelay: '0.1s'}}>
+                    {/* Multi-layer seamless blending */}
+                    <div className="absolute inset-0 bg-gradient-to-br from-bonk-red/20 via-bonk-red/10 to-transparent"></div>
+                    <div className="absolute inset-0 bg-gradient-to-tl from-bonk-orange/15 via-transparent to-bonk-red/8"></div>
+                    <div className="absolute inset-0 bg-white/5 backdrop-blur-sm"></div>
+                    
+                    {/* Animated glow effect */}
+                    <div className="absolute inset-0 bg-gradient-to-r from-bonk-red/40 via-bonk-orange/30 to-bonk-red/40 rounded-3xl opacity-0 group-hover:opacity-30 transition-opacity duration-500 blur-xl"></div>
+                    
+                    <div className="relative p-8 text-center">
+                      {/* Glowing icon with multiple layers */}
+                      <div className="relative w-20 h-20 mx-auto mb-6">
+                        <div className="absolute inset-0 bg-bonk-red/40 rounded-full blur-xl animate-pulse"></div>
+                        <div className="absolute inset-0 bg-gradient-to-br from-bonk-red/50 to-bonk-red/20 rounded-full"></div>
+                        <div className="relative bg-gradient-to-br from-bonk-red/60 via-bonk-red/40 to-bonk-red/20 w-20 h-20 rounded-full flex items-center justify-center border-2 border-bonk-red/50 shadow-2xl">
+                          <Flame className="w-10 h-10 text-white drop-shadow-lg" />
+                        </div>
+                      </div>
+                      
+                      <h4 className="bonk-header text-xl sm:text-2xl mb-3 text-white drop-shadow-lg">STREAK BONUS</h4>
+                      <p className="bonk-body text-sm sm:text-base text-white/95 leading-relaxed">Chain correct answers for massive point multipliers!</p>
+                    </div>
                   </div>
-                  <h4 className="font-bebas text-xl mb-2 text-yellow-400">STREAK BONUS</h4>
-                  <p className="font-space text-sm text-gray-300">Chain correct answers for mega points!</p>
-                </div>
-                <div className="bg-gray-900/80 p-6 rounded-xl border border-gray-700 hover:border-yellow-400/50 transition-colors">
-                  <div className="bg-yellow-400/20 w-16 h-16 rounded-full flex items-center justify-center mb-4 mx-auto">
-                    <Trophy className="w-8 h-8 text-yellow-400" />
+
+                  {/* Win Big Card - Ultra Blended */}
+                  <div className="group relative overflow-hidden rounded-3xl transition-all duration-700 hover:scale-105 bonk-fade-in" style={{animationDelay: '0.2s'}}>
+                    {/* Multi-layer seamless blending */}
+                    <div className="absolute inset-0 bg-gradient-to-br from-bonk-yellow/20 via-bonk-yellow/10 to-transparent"></div>
+                    <div className="absolute inset-0 bg-gradient-to-tl from-bonk-orange/15 via-transparent to-bonk-yellow/8"></div>
+                    <div className="absolute inset-0 bg-white/5 backdrop-blur-sm"></div>
+                    
+                    {/* Animated glow effect */}
+                    <div className="absolute inset-0 bg-gradient-to-r from-bonk-yellow/40 via-bonk-orange/30 to-bonk-yellow/40 rounded-3xl opacity-0 group-hover:opacity-30 transition-opacity duration-500 blur-xl"></div>
+                    
+                    <div className="relative p-8 text-center">
+                      {/* Glowing icon with multiple layers */}
+                      <div className="relative w-20 h-20 mx-auto mb-6">
+                        <div className="absolute inset-0 bg-bonk-yellow/40 rounded-full blur-xl animate-pulse"></div>
+                        <div className="absolute inset-0 bg-gradient-to-br from-bonk-yellow/50 to-bonk-yellow/20 rounded-full"></div>
+                        <div className="relative bg-gradient-to-br from-bonk-yellow/60 via-bonk-yellow/40 to-bonk-yellow/20 w-20 h-20 rounded-full flex items-center justify-center border-2 border-bonk-yellow/50 shadow-2xl">
+                          <Trophy className="w-10 h-10 text-white drop-shadow-lg" />
+                        </div>
+                      </div>
+                      
+                      <h4 className="bonk-header text-xl sm:text-2xl mb-3 text-white drop-shadow-lg">WIN BIG</h4>
+                      <p className="bonk-body text-sm sm:text-base text-white/95 leading-relaxed">Top players split the prize pool. Every game counts!</p>
+                    </div>
                   </div>
-                  <h4 className="font-bebas text-xl mb-2 text-yellow-400">WIN BIG</h4>
-                  <p className="font-space text-sm text-gray-300">Top players split the prize pool!</p>
+
                 </div>
               </div>
             </div>
 
             <div className="space-y-6">
-              <div className="font-space text-base sm:text-lg text-gray-300 bg-gray-800/60 px-6 py-3 rounded-lg inline-block border border-gray-700">
-                Entry: FREE
+              <div className="bonk-badge-outline text-base sm:text-lg">
+                ENTRY: FREE
               </div>
               <button 
                 onClick={startGame}
-                className="group font-bebas text-2xl sm:text-3xl px-8 sm:px-12 py-4 sm:py-5 rounded-xl bg-yellow-400 text-gray-900 hover:bg-yellow-300 transition-all transform hover:scale-105 active:scale-95 flex items-center justify-center space-x-3 mx-auto glow-yellow"
+                className="bonk-btn-primary bonk-glow group text-2xl sm:text-3xl px-8 sm:px-12 py-4 sm:py-5 flex items-center justify-center space-x-3 mx-auto"
               >
                 <Play className="w-6 sm:w-8 h-6 sm:h-8" />
                 <span>START BLITZ</span>
@@ -318,50 +401,50 @@ const BonkBlitz = () => {
         {gameState === 'playing' && currentQuestionData && (
           <div className="w-full max-w-4xl">
             {/* Game Header */}
-            <div className="grid grid-cols-2 sm:flex sm:justify-between items-center mb-6 sm:mb-8 bg-gray-800/60 backdrop-blur-md rounded-2xl p-4 sm:p-6 gap-3 sm:gap-4 border border-gray-700">
-              <div className="bg-gray-900/80 px-4 py-3 rounded-xl border border-gray-700">
-                <div className="font-bebas text-2xl sm:text-3xl text-yellow-400">{timeLeft}s</div>
-                <div className="font-space text-xs sm:text-sm text-gray-400">Game Time</div>
+            <div className="grid grid-cols-2 sm:flex sm:justify-between items-center mb-6 sm:mb-8 bonk-widget p-4 sm:p-6 gap-3 sm:gap-4">
+              <div className="bonk-widget-dark px-4 py-3 rounded-xl">
+                <div className="bonk-header text-2xl sm:text-3xl text-bonk-yellow">{timeLeft}s</div>
+                <div className="bonk-body text-xs sm:text-sm text-gray-300">Game Time</div>
               </div>
-              <div className="bg-gray-900/80 px-4 py-3 rounded-xl border border-gray-700">
-                <div className="font-bebas text-2xl sm:text-3xl text-yellow-400">{formattedScore}</div>
-                <div className="font-space text-xs sm:text-sm text-gray-400">Score</div>
+              <div className="bonk-widget-dark px-4 py-3 rounded-xl">
+                <div className="bonk-header text-2xl sm:text-3xl text-bonk-yellow">{formattedScore}</div>
+                <div className="bonk-body text-xs sm:text-sm text-gray-300">Score</div>
               </div>
-              <div className="bg-gray-900/80 px-4 py-3 rounded-xl border border-gray-700">
-                <div className="font-bebas text-2xl sm:text-3xl text-yellow-400">{streak}</div>
-                <div className="font-space text-xs sm:text-sm text-gray-400">Streak</div>
+              <div className="bonk-widget-dark px-4 py-3 rounded-xl">
+                <div className="bonk-header text-2xl sm:text-3xl text-bonk-yellow">{streak}</div>
+                <div className="bonk-body text-xs sm:text-sm text-gray-300">Streak</div>
               </div>
-              <div className="bg-gray-900/80 px-4 py-3 rounded-xl border border-gray-700 col-span-2 sm:col-span-1">
-                <div className="font-bebas text-lg sm:text-xl text-yellow-400">{questionProgress}</div>
-                <div className="font-space text-xs sm:text-sm text-gray-400">Progress</div>
+              <div className="bonk-widget-dark px-4 py-3 rounded-xl col-span-2 sm:col-span-1">
+                <div className="bonk-header text-lg sm:text-xl text-bonk-yellow">{questionProgress}</div>
+                <div className="bonk-body text-xs sm:text-sm text-gray-300">Progress</div>
               </div>
             </div>
 
             {/* Question */}
-            <div className="bg-gray-800/60 backdrop-blur-md rounded-2xl p-4 sm:p-8 mb-6 border border-gray-700">
+            <div className="bonk-widget p-4 sm:p-8 mb-6">
               <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
-                <h3 className="font-bebas text-2xl sm:text-3xl text-yellow-400">
+                <h3 className="bonk-header text-2xl sm:text-3xl text-bonk-yellow">
                   QUESTION {currentQuestionIndex + 1}
                 </h3>
-                <div className={`font-bebas text-3xl sm:text-4xl px-4 py-2 rounded-xl ${
+                <div className={`bonk-header text-3xl sm:text-4xl px-4 py-2 rounded-xl border-2 ${
                   questionTimeLeft <= 2 
-                    ? 'text-red-400 bg-red-400/20 border border-red-400 animate-pulse' 
-                    : 'text-yellow-400 bg-yellow-400/20 border border-yellow-400'
+                    ? 'text-bonk-red bg-red-900/20 border-bonk-red bonk-pulse' 
+                    : 'text-bonk-yellow bg-bonk-yellow/10 border-bonk-yellow'
                 }`}>
                   {questionTimeLeft}s
                 </div>
               </div>
-              <p className="font-space text-base sm:text-xl mb-6 sm:mb-8 text-center text-gray-200 bg-gray-900/60 p-4 rounded-xl border border-gray-700">
+              <p className="bonk-body text-base sm:text-xl mb-6 sm:mb-8 text-center bonk-widget-dark p-4 rounded-xl">
                 {currentQuestionData.question}
               </p>
               
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 {currentQuestionData.options.map((option, index) => {
                   const getAnswerColor = () => {
-                    if (!isAnswered) return 'bg-gray-900/80 hover:bg-gray-800 border-gray-700 hover:border-yellow-400/50';
-                    if (index === currentQuestionData.correct) return 'bg-green-900/40 border-green-400';
-                    if (index === selectedAnswer && index !== currentQuestionData.correct) return 'bg-red-900/40 border-red-400';
-                    return 'bg-gray-900/40 border-gray-700 opacity-50';
+                    if (!isAnswered) return 'bonk-answer-btn';
+                    if (index === currentQuestionData.correct) return 'bonk-answer-correct';
+                    if (index === selectedAnswer && index !== currentQuestionData.correct) return 'bonk-answer-wrong';
+                    return 'bonk-answer-disabled';
                   };
 
                   return (
@@ -369,24 +452,26 @@ const BonkBlitz = () => {
                       key={index}
                       onClick={() => selectAnswer(index)}
                       disabled={isAnswered}
-                      className={`font-space p-4 text-base sm:text-lg font-medium rounded-xl transition-all transform hover:scale-[1.02] active:scale-95 text-white border-2 ${getAnswerColor()}`}
+                      className={`${getAnswerColor()} bonk-fade-in`}
+                      style={{animationDelay: `${index * 0.1}s`}}
                     >
-                      <span className="font-bebas text-yellow-400 mr-2">{String.fromCharCode(65 + index)}.</span> {option}
+                      <span className="bonk-header text-bonk-yellow mr-2">{String.fromCharCode(65 + index)}.</span> 
+                      <span className="bonk-body">{option}</span>
                     </button>
                   );
                 })}
               </div>
 
               {isAnswered && (
-                <div className="mt-6 text-center">
+                <div className="mt-6 text-center bonk-fade-in">
                   {selectedAnswer === currentQuestionData.correct ? (
-                    <div className="font-space text-base sm:text-lg font-bold text-green-400 bg-green-400/20 p-4 rounded-xl border border-green-400">
+                    <div className="bonk-body text-base sm:text-lg font-bold text-green-400 bg-green-900/20 p-4 rounded-xl border border-green-400">
                       <Star className="w-6 h-6 inline mr-2" />
-                      Awesome! +{1000 + (questionTimeLeft * 100) + (streak * 50)} points!
+                      AWESOME! +{1000 + (questionTimeLeft * 100) + (streak * 50)} POINTS!
                     </div>
                   ) : (
-                    <div className="font-space text-base sm:text-lg font-bold text-red-400 bg-red-400/20 p-4 rounded-xl border border-red-400">
-                      Oops! Answer: {currentQuestionData.options[currentQuestionData.correct]}
+                    <div className="bonk-body text-base sm:text-lg font-bold text-red-400 bg-red-900/20 p-4 rounded-xl border border-red-400">
+                      OOPS! ANSWER: {currentQuestionData.options[currentQuestionData.correct]}
                     </div>
                   )}
                 </div>
@@ -399,44 +484,44 @@ const BonkBlitz = () => {
           <div className="text-center max-w-2xl w-full">
             <div className="mb-8">
               <div className="relative mb-6">
-                <Trophy className="w-20 sm:w-28 h-20 sm:h-28 text-yellow-400 mx-auto float-animation" />
+                <Trophy className="w-20 sm:w-28 h-20 sm:h-28 text-bonk-yellow mx-auto bonk-bounce" />
               </div>
-              <h2 className="font-bebas text-5xl sm:text-7xl mb-4 text-yellow-400 text-glow">
+              <h2 className="bonk-header-spaced text-5xl sm:text-7xl mb-4 shadow-bonk-glow">
                 BLITZ COMPLETE
               </h2>
             </div>
 
-            <div className="bg-gray-800/60 backdrop-blur-md rounded-2xl p-6 sm:p-8 mb-8 border border-gray-700">
+            <div className="bonk-widget p-6 sm:p-8 mb-8">
               <div className="grid grid-cols-3 gap-3 sm:gap-6 mb-6">
-                <div className="bg-gray-900/80 p-4 rounded-xl border border-gray-700">
-                  <div className="font-bebas text-2xl sm:text-3xl text-yellow-400">{formattedScore}</div>
-                  <div className="font-space text-xs sm:text-sm text-gray-400">Final Score</div>
+                <div className="bonk-widget-dark p-4 rounded-xl">
+                  <div className="bonk-header text-2xl sm:text-3xl text-bonk-yellow">{formattedScore}</div>
+                  <div className="bonk-body text-xs sm:text-sm text-gray-300">Final Score</div>
                 </div>
-                <div className="bg-gray-900/80 p-4 rounded-xl border border-gray-700">
-                  <div className="font-bebas text-2xl sm:text-3xl text-yellow-400">{streak}</div>
-                  <div className="font-space text-xs sm:text-sm text-gray-400">Best Streak</div>
+                <div className="bonk-widget-dark p-4 rounded-xl">
+                  <div className="bonk-header text-2xl sm:text-3xl text-bonk-yellow">{streak}</div>
+                  <div className="bonk-body text-xs sm:text-sm text-gray-300">Best Streak</div>
                 </div>
-                <div className="bg-gray-900/80 p-4 rounded-xl border border-gray-700">
-                  <div className="font-bebas text-2xl sm:text-3xl text-yellow-400">{accuracy}%</div>
-                  <div className="font-space text-xs sm:text-sm text-gray-400">Accuracy</div>
+                <div className="bonk-widget-dark p-4 rounded-xl">
+                  <div className="bonk-header text-2xl sm:text-3xl text-bonk-yellow">{accuracy}%</div>
+                  <div className="bonk-body text-xs sm:text-sm text-gray-300">Accuracy</div>
                 </div>
               </div>
 
-              <div className="bg-yellow-400/10 p-6 rounded-xl border border-yellow-400">
-                <h3 className="font-bebas text-2xl mb-3 text-yellow-400">YOUR EPIC RANKING</h3>
-                <p className="font-bebas text-3xl sm:text-4xl text-white mb-2">
-                  #{finalRank} out of {state.liveGame.currentPlayers} players
+              <div className="bg-bonk-orange/10 p-6 rounded-xl border border-bonk-orange">
+                <h3 className="bonk-header text-2xl mb-3 text-bonk-yellow">YOUR EPIC RANKING</h3>
+                <p className="bonk-header text-3xl sm:text-4xl mb-2">
+                  #{finalRank} OUT OF 42 PLAYERS
                 </p>
-                <p className="font-space text-sm text-gray-300">
+                <p className="bonk-body text-sm text-gray-300">
                   <Award className="w-4 h-4 inline mr-1" />
-                  Games played today: {state.gameStats.gamesPlayedToday}
+                  GAMES PLAYED TODAY: 156
                 </p>
               </div>
             </div>
 
             <button 
               onClick={resetGame}
-              className="group font-bebas text-xl sm:text-2xl px-6 sm:px-8 py-4 bg-yellow-400 text-gray-900 rounded-xl hover:bg-yellow-300 transition-all transform hover:scale-105 active:scale-95 flex items-center justify-center space-x-3 mx-auto glow-yellow"
+              className="bonk-btn-primary bonk-glow group text-xl sm:text-2xl px-6 sm:px-8 py-4 flex items-center justify-center space-x-3 mx-auto"
             >
               <RefreshCw className="w-5 sm:w-6 h-5 sm:h-6 group-hover:rotate-180 transition-transform duration-500" />
               <span>PLAY AGAIN</span>
