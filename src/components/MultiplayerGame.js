@@ -23,7 +23,8 @@ const MultiplayerGame = () => {
     joinRound,
     leaveRound,
     submitAnswer,
-    loading
+    loading,
+    roundStartCountdown
   } = useMultiplayer();
 
   const [playerName, setPlayerName] = useState('');
@@ -40,10 +41,25 @@ const MultiplayerGame = () => {
 
   const handleJoinRound = async () => {
     if (showNameInput && playerName.trim()) {
-      await joinRound(playerName.trim());
-      setShowNameInput(false);
+      try {
+        await joinRound(playerName.trim());
+        setShowNameInput(false);
+        setPlayerName(''); // Clear name after joining
+      } catch (error) {
+        console.error('Error joining round:', error);
+      }
     } else {
       setShowNameInput(true);
+    }
+  };
+
+  const handleNameChange = (e) => {
+    setPlayerName(e.target.value);
+  };
+
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter' && playerName.trim()) {
+      handleJoinRound();
     }
   };
 
@@ -94,9 +110,20 @@ const MultiplayerGame = () => {
             <div className="absolute inset-0 w-16 h-16 bg-yellow-400/30 rounded-full animate-ping"></div>
           </div>
           <h2 className="font-bebas text-3xl text-yellow-400 mb-2">{activeRound.name || 'MULTIPLAYER ROUND'}</h2>
-          <p className="font-space text-gray-300 mb-4">
-            Join now and wait for the admin to start the game!
-          </p>
+          {roundStartCountdown !== null && roundStartCountdown > 0 ? (
+            <div className="bg-yellow-400/20 border border-yellow-400 rounded-xl p-4 mb-4">
+              <p className="font-bebas text-yellow-400 text-2xl">
+                STARTING IN: {Math.floor(roundStartCountdown / 60)}:{(roundStartCountdown % 60).toString().padStart(2, '0')}
+              </p>
+              <p className="font-space text-gray-300 text-sm">
+                Get ready! The round will begin automatically.
+              </p>
+            </div>
+          ) : (
+            <p className="font-space text-gray-300 mb-4">
+              Join now and wait for the admin to start the game!
+            </p>
+          )}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
@@ -124,11 +151,12 @@ const MultiplayerGame = () => {
                 <input
                   type="text"
                   value={playerName}
-                  onChange={(e) => setPlayerName(e.target.value)}
+                  onChange={handleNameChange}
+                  onKeyPress={handleKeyPress}
                   placeholder="Enter your player name..."
                   className="font-space w-full p-3 mb-4 bg-gray-900 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:border-yellow-400/50 focus:outline-none"
-                  onKeyPress={(e) => e.key === 'Enter' && handleJoinRound()}
                   autoFocus
+                  maxLength={20}
                 />
                 <div className="flex gap-3">
                   <button

@@ -1,5 +1,5 @@
 // context/MultiplayerContext.js
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { 
   collection, 
   doc, 
@@ -40,6 +40,16 @@ export const MultiplayerProvider = ({ children }) => {
   const [leaderboard, setLeaderboard] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [roundStartCountdown, setRoundStartCountdown] = useState(null);
+
+  // Debug: Log state changes
+  useEffect(() => {
+    console.log('MultiplayerContext - activeRound changed:', activeRound);
+  }, [activeRound]);
+
+  useEffect(() => {
+    console.log('MultiplayerContext - questions available:', state.questions.length);
+  }, [state.questions]);
 
   // Helper function to get random questions
   const getRandomQuestions = (allQuestions, count, categories) => {
@@ -51,24 +61,168 @@ export const MultiplayerProvider = ({ children }) => {
     return shuffled.slice(0, count);
   };
 
+  // ADMIN FUNCTIONS - Define these first before useEffect that depends on them
+
+  // Create a new multiplayer round (Admin only)
+  const createRound = useCallback(async (settings = {}) => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Get random questions from the database
+      const selectedQuestions = getRandomQuestions(
+        state.questions, 
+        settings.questionCount || 10,
+        settings.categories || ['blockchain', 'defi', 'nft']
+      );
+
+      if (selectedQuestions.length === 0) {
+        throw new Error('No questions available for the selected categories');
+      }
+
+      const roundData = {
+        name: settings.name || 'Bonk Blitz Round',
+        status: 'waiting', // waiting, playing, finished
+        players: [],
+        questions: selectedQuestions,
+        currentQuestionIndex: 0,
+        questionCount: settings.questionCount || 10,
+        timePerQuestion: settings.timePerQuestion || 15,
+        categories: settings.categories || ['blockchain', 'defi', 'nft'],
+        startDelay: settings.startDelay || 30,
+        scheduledStartTime: new Date(Date.now() + (settings.startDelay || 30) * 1000).toISOString(),
+        startTime: null,
+        endTime: null,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      };
+
+      console.log('Creating round with data:', roundData);
+      const docRef = await addDoc(collection(db, 'multiplayerRounds'), roundData);
+      console.log('Round created successfully with ID:', docRef.id);
+      
+      return { roundId: docRef.id };
+    } catch (err) {
+      console.error('Error in createRound:', err);
+      setError('Failed to create round: ' + err.message);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, [state.questions]);
+
+  // Start the round (Admin only)
+  const startRound = useCallback(async (roundId) => {
+    try {
+      setLoading(true);
+      const roundRef = doc(db, 'multiplayerRounds', roundId);
+      
+      await updateDoc(roundRef, {
+        status: 'playing',
+        startTime: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+
+    } catch (err) {
+      setError('Failed to start round: ' + err.message);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // End the round (Admin only)
+  const endRound = useCallback(async (roundId) => {
+    try {
+      setLoading(true);
+      const roundRef = doc(db, 'multiplayerRounds', roundId);
+      
+      await updateDoc(roundRef, {
+        status: 'finished',
+        endTime: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+
+    } catch (err) {
+      setError('Failed to end round: ' + err.message);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Next question (Admin only)
+  const nextQuestion = useCallback(async (roundId) => {
+    try {
+      const roundRef = doc(db, 'multiplayerRounds', roundId);
+      const newIndex = (activeRound?.currentQuestionIndex || 0) + 1;
+      
+      if (newIndex >= (activeRound?.questionCount || 10)) {
+        // End game if all questions answered
+        await endRound(roundId);
+      } else {
+        await updateDoc(roundRef, {
+          currentQuestionIndex: newIndex,
+          updatedAt: serverTimestamp()
+        });
+      }
+    } catch (err) {
+      setError('Failed to advance question: ' + err.message);
+      throw err;
+    }
+  }, [activeRound?.currentQuestionIndex, activeRound?.questionCount, endRound]);
+
+  // Delete round (Admin only)
+  const deleteRound = useCallback(async (roundId) => {
+    try {
+      setLoading(true);
+      console.log('Deleting round:', roundId);
+      await deleteDoc(doc(db, 'multiplayerRounds', roundId));
+      console.log('Round deleted successfully');
+    } catch (err) {
+      console.error('Error deleting round:', err);
+      setError('Failed to delete round: ' + err.message);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   // Listen for active rounds
   useEffect(() => {
     console.log('Setting up listener for active rounds...');
     
     const roundsRef = collection(db, 'multiplayerRounds');
-    const activeRoundQuery = query(
-      roundsRef, 
-      where('status', 'in', ['waiting', 'playing']),
-      orderBy('createdAt', 'desc')
-    );
-
-    const unsubscribe = onSnapshot(activeRoundQuery, (snapshot) => {
-      console.log('Received snapshot with', snapshot.docs.length, 'rounds');
+    
+    // Try simple listener first - just get all rounds
+    const unsubscribe = onSnapshot(roundsRef, (snapshot) => {
+      console.log('Received snapshot with', snapshot.docs.length, 'total rounds');
       
-      if (!snapshot.empty) {
-        const roundData = snapshot.docs[0].data();
-        console.log('Active round found:', roundData);
-        setActiveRound({ id: snapshot.docs[0].id, ...roundData });
+      const allRounds = snapshot.docs.map(doc => ({ 
+        id: doc.id, 
+        ...doc.data() 
+      }));
+      
+      console.log('All rounds:', allRounds);
+      
+      // Filter for active rounds manually
+      const activeRounds = allRounds.filter(round => 
+        round.status === 'waiting' || round.status === 'playing'
+      );
+      
+      console.log('Active rounds found:', activeRounds);
+      
+      if (activeRounds.length > 0) {
+        // Get the most recent active round
+        const sortedRounds = activeRounds.sort((a, b) => {
+          const aTime = a.createdAt?.toMillis?.() || a.createdAt?.seconds * 1000 || 0;
+          const bTime = b.createdAt?.toMillis?.() || b.createdAt?.seconds * 1000 || 0;
+          return bTime - aTime;
+        });
+        
+        const roundData = sortedRounds[0];
+        console.log('Setting active round:', roundData);
+        setActiveRound(roundData);
       } else {
         console.log('No active rounds found');
         setActiveRound(null);
@@ -94,140 +248,36 @@ export const MultiplayerProvider = ({ children }) => {
     }
   }, [activeRound]);
 
-  // Timer countdown
+  // Countdown timer for round start - NOW startRound is available
   useEffect(() => {
-    if (activeRound?.status === 'playing' && timeLeft > 0) {
-      const timer = setTimeout(() => {
-        setTimeLeft(prev => prev - 1);
-      }, 1000);
-      return () => clearTimeout(timer);
+    if (activeRound?.status === 'waiting' && activeRound.scheduledStartTime) {
+      const updateCountdown = () => {
+        const now = new Date().getTime();
+        const startTime = new Date(activeRound.scheduledStartTime).getTime();
+        const timeLeft = Math.max(0, Math.floor((startTime - now) / 1000));
+        
+        setRoundStartCountdown(timeLeft);
+        
+        // Auto-start round when countdown reaches 0
+        if (timeLeft === 0 && activeRound.status === 'waiting') {
+          startRound(activeRound.id);
+        }
+      };
+
+      updateCountdown();
+      const interval = setInterval(updateCountdown, 1000);
+      
+      return () => clearInterval(interval);
+    } else {
+      setRoundStartCountdown(null);
     }
-  }, [timeLeft, activeRound?.status]);
+  }, [activeRound?.status, activeRound?.scheduledStartTime, activeRound?.id, startRound]);
 
   // Generate player name
   const generatePlayerName = () => {
     const adjectives = ['Quick', 'Smart', 'Fast', 'Clever', 'Sharp', 'Bright', 'Swift', 'Keen'];
     const nouns = ['Bonker', 'Trader', 'Holder', 'Ape', 'Diamond', 'Moon', 'Rocket', 'Whale'];
     return `${adjectives[Math.floor(Math.random() * adjectives.length)]}${nouns[Math.floor(Math.random() * nouns.length)]}`;
-  };
-
-  // ADMIN FUNCTIONS
-
-  // Create a new multiplayer round (Admin only)
-  const createRound = async (settings = {}) => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      // Get random questions from the database
-      const selectedQuestions = getRandomQuestions(
-        state.questions, 
-        settings.questionCount || 10,
-        settings.categories || ['blockchain', 'defi', 'nft']
-      );
-
-      if (selectedQuestions.length === 0) {
-        throw new Error('No questions available for the selected categories');
-      }
-
-      const roundData = {
-        name: settings.name || 'Bonk Blitz Round',
-        status: 'waiting', // waiting, playing, finished
-        players: [],
-        questions: selectedQuestions,
-        currentQuestionIndex: 0,
-        questionCount: settings.questionCount || 10,
-        timePerQuestion: settings.timePerQuestion || 15,
-        categories: settings.categories || ['blockchain', 'defi', 'nft'],
-        startTime: null,
-        endTime: null,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      };
-
-      console.log('Creating round with data:', roundData);
-      const docRef = await addDoc(collection(db, 'multiplayerRounds'), roundData);
-      console.log('Round created successfully with ID:', docRef.id);
-      
-      return { roundId: docRef.id };
-    } catch (err) {
-      console.error('Error in createRound:', err);
-      setError('Failed to create round: ' + err.message);
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Start the round (Admin only)
-  const startRound = async (roundId) => {
-    try {
-      setLoading(true);
-      const roundRef = doc(db, 'multiplayerRounds', roundId);
-      
-      await updateDoc(roundRef, {
-        status: 'playing',
-        startTime: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      });
-
-    } catch (err) {
-      setError('Failed to start round: ' + err.message);
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // End the round (Admin only)
-  const endRound = async (roundId) => {
-    try {
-      setLoading(true);
-      const roundRef = doc(db, 'multiplayerRounds', roundId);
-      
-      await updateDoc(roundRef, {
-        status: 'finished',
-        endTime: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      });
-
-    } catch (err) {
-      setError('Failed to end round: ' + err.message);
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Next question (Admin only)
-  const nextQuestion = async (roundId) => {
-    try {
-      const roundRef = doc(db, 'multiplayerRounds', roundId);
-      const newIndex = (activeRound?.currentQuestionIndex || 0) + 1;
-      
-      if (newIndex >= (activeRound?.questionCount || 10)) {
-        // End game if all questions answered
-        await endRound(roundId);
-      } else {
-        await updateDoc(roundRef, {
-          currentQuestionIndex: newIndex,
-          updatedAt: serverTimestamp()
-        });
-      }
-    } catch (err) {
-      setError('Failed to advance question: ' + err.message);
-      throw err;
-    }
-  };
-
-  // Delete round (Admin only)
-  const deleteRound = async (roundId) => {
-    try {
-      await deleteDoc(doc(db, 'multiplayerRounds', roundId));
-    } catch (err) {
-      setError('Failed to delete round: ' + err.message);
-      throw err;
-    }
   };
 
   // PLAYER FUNCTIONS
@@ -247,7 +297,7 @@ export const MultiplayerProvider = ({ children }) => {
         name: playerName || generatePlayerName(),
         score: 0,
         answers: [],
-        joinedAt: serverTimestamp()
+        joinedAt: new Date().toISOString() // Use regular timestamp instead of serverTimestamp
       };
 
       const roundRef = doc(db, 'multiplayerRounds', activeRound.id);
@@ -361,6 +411,7 @@ export const MultiplayerProvider = ({ children }) => {
     leaderboard,
     loading,
     error,
+    roundStartCountdown,
 
     // Admin Functions
     createRound,

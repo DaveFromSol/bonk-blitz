@@ -36,7 +36,8 @@ const AdminMultiplayerControls = () => {
     name: '',
     questionCount: 10,
     timePerQuestion: 15,
-    categories: ['blockchain', 'defi', 'nft']
+    categories: ['blockchain', 'defi', 'nft'],
+    startDelay: 30 // seconds until round starts
   });
   const [createError, setCreateError] = useState(null);
 
@@ -85,7 +86,8 @@ const AdminMultiplayerControls = () => {
         name: '',
         questionCount: 10,
         timePerQuestion: 15,
-        categories: ['blockchain', 'defi', 'nft']
+        categories: ['blockchain', 'defi', 'nft'],
+        startDelay: 30
       });
     } catch (error) {
       console.error('Error creating round:', error);
@@ -111,14 +113,30 @@ const AdminMultiplayerControls = () => {
     }
   };
 
-  const handleDeleteRound = () => {
+  const handleDeleteRound = async () => {
     if (activeRound && window.confirm('Are you sure you want to delete this round?')) {
-      deleteRound(activeRound.id);
+      try {
+        await deleteRound(activeRound.id);
+        console.log('Round deleted from admin panel');
+      } catch (error) {
+        console.error('Error deleting round from admin:', error);
+        alert('Failed to delete round: ' + error.message);
+      }
     }
   };
 
   return (
     <div className="bg-gray-800/60 backdrop-blur-md rounded-xl p-6 border border-gray-700 mb-6">
+      {/* Debug Info */}
+      <div className="mb-4 p-3 bg-blue-900/20 border border-blue-400/50 rounded-xl">
+        <h4 className="font-bebas text-blue-400 text-sm mb-2">DEBUG INFO</h4>
+        <div className="font-space text-xs text-blue-300">
+          <div>activeRound: {activeRound ? `${activeRound.name} (${activeRound.status})` : 'null'}</div>
+          <div>loading: {loading ? 'true' : 'false'}</div>
+          <div>Available questions: {state.questions.length}</div>
+        </div>
+      </div>
+
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <div className="flex items-center gap-3">
           <div className="relative">
@@ -309,6 +327,19 @@ const AdminMultiplayerControls = () => {
                   onChange={(e) => setRoundSettings(prev => ({ ...prev, timePerQuestion: parseInt(e.target.value) }))}
                   className="font-space w-full p-3 bg-gray-800 border border-gray-700 rounded-xl text-white focus:border-yellow-400/50 focus:outline-none"
                 />
+              </div>
+
+              <div>
+                <label className="font-space block text-white font-bold mb-2">Start Delay (seconds)</label>
+                <input
+                  type="number"
+                  min="10"
+                  max="300"
+                  value={roundSettings.startDelay}
+                  onChange={(e) => setRoundSettings(prev => ({ ...prev, startDelay: parseInt(e.target.value) }))}
+                  className="font-space w-full p-3 bg-gray-800 border border-gray-700 rounded-xl text-white focus:border-yellow-400/50 focus:outline-none"
+                />
+                <p className="font-space text-xs text-gray-400 mt-1">Time before round auto-starts after creation</p>
               </div>
 
               <div>
