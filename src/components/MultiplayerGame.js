@@ -8,12 +8,32 @@ import {
   Crown,
   Target,
   Timer,
-  Star,
   Wallet
 } from 'lucide-react';
 import { useMultiplayer } from '../context/MultiplayerContext';
-import { useUser } from '../context/UserContext';
-import UserRegistrationModal from './UserRegistrationmodal';
+
+// BONK Character Component for Multiplayer
+const BonkMultiplayerCharacter = ({ pose, position, className = "", animate = false }) => {
+  const characters = {
+    thumbsUp: "/BONK_Pose_ThumbsUp_001.png",
+    relaxed: "/BONK_Pose_RelaxedUp_002.png", 
+    excited: "/BONK_Pose_ThumbsUp_001.png"
+  };
+
+  return (
+    <div 
+      className={`absolute ${position} ${className} ${animate ? 'bonk-bounce' : ''} transition-all duration-500 z-10 pointer-events-none`}
+      style={{ filter: 'drop-shadow(2px 2px 4px rgba(0,0,0,0.3))' }}
+    >
+      <img 
+        src={characters[pose]} 
+        alt="BONK Character" 
+        className="w-16 h-16 md:w-20 md:h-20 lg:w-24 lg:h-24"
+        style={{ imageRendering: 'auto' }}
+      />
+    </div>
+  );
+};
 
 const MultiplayerGame = () => {
   const { 
@@ -31,49 +51,61 @@ const MultiplayerGame = () => {
     roundStartCountdown
   } = useMultiplayer();
 
-  const { currentUser, isRegistered } = useUser();
-
-  const [showRegistration, setShowRegistration] = useState(false);
   const [selectedAnswer, setSelectedAnswer] = useState(null);
   const [hasAnswered, setHasAnswered] = useState(false);
   const [startTime, setStartTime] = useState(null);
-  
-  // Added missing state variables
-  const [showNameInput, setShowNameInput] = useState(false);
+  const [showJoinForm, setShowJoinForm] = useState(false);
   const [playerName, setPlayerName] = useState('');
+  const [solanaAddress, setSolanaAddress] = useState('');
+  const [characterState, setCharacterState] = useState('idle');
 
   useEffect(() => {
     setSelectedAnswer(null);
     setHasAnswered(false);
     setStartTime(Date.now());
+    
+    // Trigger BONK character animations
+    if (currentQuestion) {
+      setCharacterState('playing');
+      setTimeout(() => setCharacterState('idle'), 1000);
+    }
   }, [currentQuestion]);
 
-  // Added missing handler functions
   const handleNameChange = (e) => {
     setPlayerName(e.target.value);
   };
 
+  const handleAddressChange = (e) => {
+    setSolanaAddress(e.target.value);
+  };
+
   const handleKeyPress = (e) => {
-    if (e.key === 'Enter' && playerName.trim()) {
+    if (e.key === 'Enter' && playerName.trim() && solanaAddress.trim()) {
       handleJoinRound();
     }
   };
 
+  const isValidSolanaAddress = (address) => {
+    const base58Regex = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+    return base58Regex.test(address) && address.length >= 32 && address.length <= 44;
+  };
+
   const handleJoinRound = async () => {
+    if (!playerName.trim()) return;
+    if (!solanaAddress.trim()) return;
+    if (!isValidSolanaAddress(solanaAddress)) {
+      alert('Please enter a valid Solana address');
+      return;
+    }
+
     try {
-      // Use the current user's username since they're now guaranteed to be logged in
-      const nameToUse = currentUser?.username || playerName.trim();
-      await joinRound(nameToUse);
-      setShowNameInput(false);
+      await joinRound(playerName.trim(), solanaAddress.trim());
+      setShowJoinForm(false);
       setPlayerName('');
+      setSolanaAddress('');
     } catch (error) {
       console.error('Error joining round:', error);
     }
-  };
-
-  const handleRegistrationSuccess = () => {
-    setShowRegistration(false);
-    // User just registered, component will re-render and show multiplayer content
   };
 
   const handleAnswer = async (answerIndex) => {
@@ -84,58 +116,45 @@ const MultiplayerGame = () => {
     setHasAnswered(true);
     
     await submitAnswer(answerIndex, timeTaken);
+    
+    // Trigger BONK character celebration/disappointment
+    const isCorrect = answerIndex === currentQuestion.correct;
+    setCharacterState(isCorrect ? 'correct' : 'wrong');
+    setTimeout(() => setCharacterState('idle'), 2000);
   };
 
   const getAnswerButtonClass = (index) => {
-    const baseClass = "w-full p-4 rounded-xl font-space font-semibold text-left transition-all transform";
-    
     if (!hasAnswered) {
-      return `${baseClass} bg-gray-800 border-2 border-gray-600 text-white hover:border-yellow-400 hover:bg-gray-700 hover:scale-[1.02]`;
+      return "bonk-answer-btn";
     }
     
     if (index === currentQuestion.correct) {
-      return `${baseClass} bg-green-600 border-2 border-green-400 text-white`;
+      return "bonk-answer-correct";
     } else if (index === selectedAnswer) {
-      return `${baseClass} bg-red-600 border-2 border-red-400 text-white`;
+      return "bonk-answer-wrong";
     } else {
-      return `${baseClass} bg-gray-700 border-2 border-gray-600 text-gray-400`;
+      return "bonk-answer-disabled";
     }
   };
 
-  // Check if user is logged in - if not, show login prompt
-  if (!isRegistered()) {
-    return (
-      <div className="bg-gray-800/40 backdrop-blur-sm rounded-2xl p-8 border border-gray-700 text-center">
-        <Users className="w-16 h-16 mx-auto mb-4 text-yellow-400" />
-        <h2 className="font-bebas text-3xl text-yellow-400 mb-4">LOGIN REQUIRED</h2>
-        <p className="font-space text-gray-300 mb-6">
-          You need to create an account and login to access multiplayer games.
-        </p>
-        <button
-          onClick={() => setShowRegistration(true)}
-          className="font-bebas bg-yellow-400 text-gray-900 py-3 px-8 rounded-xl hover:bg-yellow-300 transition-all transform hover:scale-105 flex items-center gap-2 mx-auto"
-        >
-          <Users className="w-5 h-5" />
-          CREATE ACCOUNT & LOGIN
-        </button>
-        
-        {/* Registration Modal */}
-        {showRegistration && (
-          <UserRegistrationModal
-            onClose={() => setShowRegistration(false)}
-            onRegistrationSuccess={() => setShowRegistration(false)}
-          />
-        )}
-      </div>
-    );
-  }
-
   if (!activeRound) {
     return (
-      <div className="bg-gray-800/40 backdrop-blur-sm rounded-2xl p-8 border border-gray-700 text-center">
+      <div className="relative bonk-card bonk-fade-in p-8 text-center max-w-2xl mx-auto mt-20">
+        {/* BONK Characters for No Active Round */}
+        <BonkMultiplayerCharacter 
+          pose="relaxed" 
+          position="-left-16 top-1/2 transform -translate-y-1/2" 
+          className="hidden lg:block"
+        />
+        <BonkMultiplayerCharacter 
+          pose="relaxed" 
+          position="-right-16 top-1/2 transform -translate-y-1/2" 
+          className="hidden lg:block"
+        />
+        
         <Users className="w-16 h-16 mx-auto mb-4 text-gray-600" />
-        <h2 className="font-bebas text-3xl text-gray-400 mb-2">NO MULTIPLAYER ROUND ACTIVE</h2>
-        <p className="font-space text-gray-500">
+        <h2 className="bonk-subtitle text-3xl mb-2">NO MULTIPLAYER ROUND ACTIVE</h2>
+        <p className="text-gray-400">
           Check back later or ask an admin to start a round!
         </p>
       </div>
@@ -144,82 +163,123 @@ const MultiplayerGame = () => {
 
   if (activeRound.status === 'waiting') {
     return (
-      <div className="bg-gray-800/40 backdrop-blur-sm rounded-2xl p-8 border border-gray-700">
+      <div className="relative bonk-card bonk-fade-in p-8 max-w-4xl mx-auto mt-20">
+        {/* BONK Characters for Waiting Room */}
+        <BonkMultiplayerCharacter 
+          pose="thumbsUp" 
+          position="-left-20 top-1/2 transform -translate-y-1/2" 
+          className="hidden xl:block"
+          animate={roundStartCountdown !== null && roundStartCountdown <= 10}
+        />
+        <BonkMultiplayerCharacter 
+          pose="excited" 
+          position="-right-20 top-1/2 transform -translate-y-1/2" 
+          className="hidden xl:block"
+          animate={roundStartCountdown !== null && roundStartCountdown <= 10}
+        />
+        
         <div className="text-center mb-6">
           <div className="relative inline-block mb-4">
-            <Users className="w-16 h-16 text-yellow-400 animate-pulse" />
-            <div className="absolute inset-0 w-16 h-16 bg-yellow-400/30 rounded-full animate-ping"></div>
+            <Users className="w-16 h-16 text-bonk-yellow bonk-pulse" />
+            <div className="absolute inset-0 w-16 h-16 bg-bonk-yellow/30 rounded-full animate-ping"></div>
           </div>
-          <h2 className="font-bebas text-3xl text-yellow-400 mb-2">{activeRound.name || 'MULTIPLAYER ROUND'}</h2>
+          <h2 className="bonk-title text-3xl mb-2">{activeRound.name || 'MULTIPLAYER ROUND'}</h2>
           {roundStartCountdown !== null && roundStartCountdown > 0 ? (
-            <div className="bg-yellow-400/20 border border-yellow-400 rounded-xl p-4 mb-4">
-              <p className="font-bebas text-yellow-400 text-2xl">
+            <div className="bonk-card-glow p-4 mb-4 border-bonk-yellow">
+              <p className="bonk-subtitle text-2xl">
                 STARTING IN: {Math.floor(roundStartCountdown / 60)}:{(roundStartCountdown % 60).toString().padStart(2, '0')}
               </p>
-              <p className="font-space text-gray-300 text-sm">
+              <p className="text-gray-300 text-sm">
                 Get ready! The round will begin automatically.
               </p>
             </div>
           ) : (
-            <p className="font-space text-gray-300 mb-4">
+            <p className="text-gray-300 mb-4">
               Join now and wait for the admin to start the game!
             </p>
           )}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <div className="bg-gray-900/60 rounded-xl p-4 text-center">
-            <Target className="w-6 h-6 mx-auto mb-2 text-yellow-400" />
-            <div className="font-space text-gray-400 text-sm">Questions</div>
-            <div className="font-bebas text-xl text-white">{activeRound.questionCount}</div>
+          <div className="bonk-glass rounded-xl p-4 text-center bonk-slide-in">
+            <Target className="w-6 h-6 mx-auto mb-2 text-bonk-yellow" />
+            <div className="text-gray-400 text-sm">Questions</div>
+            <div className="bonk-subtitle text-xl">{activeRound.questionCount}</div>
           </div>
-          <div className="bg-gray-900/60 rounded-xl p-4 text-center">
-            <Clock className="w-6 h-6 mx-auto mb-2 text-yellow-400" />
-            <div className="font-space text-gray-400 text-sm">Time per Question</div>
-            <div className="font-bebas text-xl text-white">{activeRound.timePerQuestion}s</div>
+          <div className="bonk-glass rounded-xl p-4 text-center bonk-slide-in" style={{animationDelay: '0.1s'}}>
+            <Clock className="w-6 h-6 mx-auto mb-2 text-bonk-yellow" />
+            <div className="text-gray-400 text-sm">Time per Question</div>
+            <div className="bonk-subtitle text-xl">{activeRound.timePerQuestion}s</div>
           </div>
-          <div className="bg-gray-900/60 rounded-xl p-4 text-center">
-            <Users className="w-6 h-6 mx-auto mb-2 text-yellow-400" />
-            <div className="font-space text-gray-400 text-sm">Players Joined</div>
-            <div className="font-bebas text-xl text-white">{activeRound.players?.length || 0}</div>
+          <div className="bonk-glass rounded-xl p-4 text-center bonk-slide-in" style={{animationDelay: '0.2s'}}>
+            <Users className="w-6 h-6 mx-auto mb-2 text-bonk-yellow" />
+            <div className="text-gray-400 text-sm">Players Joined</div>
+            <div className="bonk-subtitle text-xl">{activeRound.players?.length || 0}</div>
           </div>
         </div>
 
         {!isInGame ? (
           <div className="text-center">
-            {showNameInput ? (
+            {showJoinForm ? (
               <div className="max-w-md mx-auto">
-                <input
-                  type="text"
-                  value={playerName}
-                  onChange={handleNameChange}
-                  onKeyPress={handleKeyPress}
-                  placeholder="Enter your player name..."
-                  className="font-space w-full p-3 mb-4 bg-gray-900 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:border-yellow-400/50 focus:outline-none"
-                  autoFocus
-                  maxLength={20}
-                />
-                <div className="flex gap-3">
-                  <button
-                    onClick={handleJoinRound}
-                    disabled={!playerName.trim() || loading}
-                    className="font-bebas flex-1 bg-yellow-400 text-gray-900 py-3 px-6 rounded-xl hover:bg-yellow-300 disabled:bg-gray-600 disabled:text-gray-400 transition-all"
-                  >
-                    JOIN ROUND
-                  </button>
-                  <button
-                    onClick={() => setShowNameInput(false)}
-                    className="font-bebas bg-gray-600 text-white py-3 px-6 rounded-xl hover:bg-gray-700 transition-all"
-                  >
-                    CANCEL
-                  </button>
+                <div className="bonk-card-glow p-6 border-bonk-yellow">
+                  <h3 className="bonk-subtitle text-xl mb-4 flex items-center gap-2 justify-center">
+                    <Wallet className="w-5 h-5" />
+                    JOIN THE ROUND
+                  </h3>
+                  
+                  <input
+                    type="text"
+                    value={playerName}
+                    onChange={handleNameChange}
+                    placeholder="Enter your display name..."
+                    className="bonk-input mb-4"
+                    maxLength={20}
+                  />
+                  
+                  <input
+                    type="text"
+                    value={solanaAddress}
+                    onChange={handleAddressChange}
+                    onKeyPress={handleKeyPress}
+                    placeholder="Enter your Solana wallet address..."
+                    className="bonk-input mb-4 text-sm"
+                    autoFocus
+                  />
+                  
+                  <p className="text-gray-400 text-xs mb-4">
+                    💡 Your Solana address is needed for potential prize distributions
+                  </p>
+                  
+                  <div className="flex gap-3">
+                    <button
+                      onClick={handleJoinRound}
+                      disabled={!playerName.trim() || !solanaAddress.trim() || loading}
+                      className="bonk-btn flex-1 disabled:opacity-50"
+                    >
+                      {loading ? (
+                        <div className="flex items-center gap-2 justify-center">
+                          <div className="bonk-spinner"></div>
+                          JOINING...
+                        </div>
+                      ) : (
+                        'JOIN ROUND'
+                      )}
+                    </button>
+                    <button
+                      onClick={() => setShowJoinForm(false)}
+                      className="bonk-btn-secondary"
+                    >
+                      CANCEL
+                    </button>
+                  </div>
                 </div>
               </div>
             ) : (
               <button
-                onClick={() => setShowNameInput(true)}
+                onClick={() => setShowJoinForm(true)}
                 disabled={loading}
-                className="font-bebas bg-yellow-400 text-gray-900 py-3 px-8 rounded-xl hover:bg-yellow-300 transition-all transform hover:scale-105 flex items-center gap-2 mx-auto"
+                className="bonk-btn bonk-glow flex items-center gap-2 mx-auto"
               >
                 <Play className="w-5 h-5" />
                 JOIN MULTIPLAYER ROUND
@@ -228,14 +288,17 @@ const MultiplayerGame = () => {
           </div>
         ) : (
           <div className="text-center">
-            <div className="bg-green-600/20 border border-green-400/50 rounded-xl p-4 mb-4">
-              <p className="font-space text-green-400">
+            <div className="bonk-card-glow p-4 mb-4 border-green-400/50 bg-green-600/20">
+              <p className="text-green-400">
                 ✅ You're in! Playing as <strong>{playerData?.name}</strong>
+              </p>
+              <p className="text-green-300 text-sm mt-1">
+                Wallet: {playerData?.solanaAddress?.slice(0, 4)}...{playerData?.solanaAddress?.slice(-4)}
               </p>
             </div>
             <button
               onClick={leaveRound}
-              className="font-bebas bg-red-600 text-white py-2 px-6 rounded-xl hover:bg-red-700 transition-all flex items-center gap-2 mx-auto"
+              className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded-xl transition-all flex items-center gap-2 mx-auto"
             >
               <LogOut className="w-4 h-4" />
               LEAVE ROUND
@@ -245,24 +308,25 @@ const MultiplayerGame = () => {
 
         {activeRound.players && activeRound.players.length > 0 && (
           <div className="mt-6">
-            <h3 className="font-bebas text-lg text-yellow-400 mb-3">WAITING PLAYERS</h3>
+            <h3 className="bonk-subtitle text-lg mb-3">WAITING PLAYERS</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-              {activeRound.players.map((player) => (
-                <div key={player.id} className="bg-gray-900/60 rounded-lg p-3 flex items-center gap-2">
+              {activeRound.players.map((player, index) => (
+                <div 
+                  key={player.id} 
+                  className="bonk-glass rounded-lg p-3 flex items-center gap-2 bonk-fade-in"
+                  style={{animationDelay: `${index * 0.1}s`}}
+                >
                   <Users className="w-4 h-4 text-gray-400" />
-                  <span className="font-space text-white">{player.name}</span>
+                  <span className="text-white">{player.name}</span>
+                  {player.solanaAddress && (
+                    <span className="text-gray-400 text-xs">
+                      ({player.solanaAddress.slice(0, 4)}...{player.solanaAddress.slice(-4)})
+                    </span>
+                  )}
                 </div>
               ))}
             </div>
           </div>
-        )}
-
-        {/* Registration Modal */}
-        {showRegistration && (
-          <UserRegistrationModal
-            onClose={() => setShowRegistration(false)}
-            onRegistrationSuccess={handleRegistrationSuccess}
-          />
         )}
       </div>
     );
@@ -270,26 +334,40 @@ const MultiplayerGame = () => {
 
   if (activeRound.status === 'playing' && isInGame) {
     return (
-      <div className="bg-gray-800/40 backdrop-blur-sm rounded-2xl p-8 border border-gray-700">
+      <div className="relative bonk-card bonk-fade-in p-8 max-w-4xl mx-auto mt-20">
+        {/* BONK Characters for Active Game */}
+        <BonkMultiplayerCharacter 
+          pose={characterState === 'correct' ? 'excited' : characterState === 'wrong' ? 'relaxed' : 'thumbsUp'} 
+          position="-left-20 top-1/2 transform -translate-y-1/2" 
+          className="hidden xl:block"
+          animate={characterState === 'correct'}
+        />
+        <BonkMultiplayerCharacter 
+          pose={characterState === 'correct' ? 'thumbsUp' : characterState === 'wrong' ? 'relaxed' : 'excited'} 
+          position="-right-20 top-1/2 transform -translate-y-1/2" 
+          className="hidden xl:block"
+          animate={characterState === 'correct'}
+        />
+        
         <div className="flex flex-col sm:flex-row justify-between items-center mb-6">
           <div className="flex items-center gap-4 mb-4 sm:mb-0">
-            <div className="bg-gray-900/60 rounded-xl px-4 py-2">
-              <span className="font-space text-gray-400 text-sm">Question </span>
-              <span className="font-bebas text-yellow-400 text-lg">
+            <div className="bonk-glass rounded-xl px-4 py-2">
+              <span className="text-gray-400 text-sm">Question </span>
+              <span className="bonk-subtitle text-lg">
                 {currentQuestionIndex + 1}/{activeRound.questionCount}
               </span>
             </div>
-            <div className="bg-gray-900/60 rounded-xl px-4 py-2">
-              <span className="font-space text-gray-400 text-sm">Your Score: </span>
-              <span className="font-bebas text-yellow-400 text-lg">{playerData?.score || 0}</span>
+            <div className="bonk-glass rounded-xl px-4 py-2">
+              <span className="text-gray-400 text-sm">Your Score: </span>
+              <span className="bonk-subtitle text-lg">{playerData?.score || 0}</span>
             </div>
           </div>
           
-          <div className={`flex items-center gap-2 bg-gray-900/60 rounded-xl px-4 py-2 ${
-            timeLeft <= 5 ? 'animate-pulse' : ''
+          <div className={`flex items-center gap-2 bonk-glass rounded-xl px-4 py-2 ${
+            timeLeft <= 5 ? 'bonk-pulse border-red-400' : ''
           }`}>
-            <Timer className={`w-5 h-5 ${timeLeft <= 5 ? 'text-red-400' : 'text-yellow-400'}`} />
-            <span className={`font-bebas text-xl ${timeLeft <= 5 ? 'text-red-400' : 'text-yellow-400'}`}>
+            <Timer className={`w-5 h-5 ${timeLeft <= 5 ? 'text-red-400' : 'text-bonk-yellow'}`} />
+            <span className={`font-bold text-xl ${timeLeft <= 5 ? 'text-red-400' : 'text-bonk-yellow'}`}>
               {timeLeft}s
             </span>
           </div>
@@ -297,8 +375,8 @@ const MultiplayerGame = () => {
 
         {currentQuestion && (
           <div className="mb-8">
-            <div className="bg-gray-900/60 rounded-xl p-6 mb-6">
-              <h2 className="font-space text-xl text-white font-bold leading-relaxed">
+            <div className="bonk-card-glow p-6 mb-6">
+              <h2 className="text-xl text-white font-bold leading-relaxed">
                 {currentQuestion.question}
               </h2>
             </div>
@@ -309,10 +387,11 @@ const MultiplayerGame = () => {
                   key={index}
                   onClick={() => handleAnswer(index)}
                   disabled={hasAnswered || timeLeft === 0}
-                  className={getAnswerButtonClass(index)}
+                  className={`${getAnswerButtonClass(index)} ${hasAnswered ? '' : 'bonk-fade-in'}`}
+                  style={{animationDelay: `${index * 0.1}s`}}
                 >
                   <div className="flex items-center gap-3">
-                    <span className="flex-shrink-0 w-8 h-8 bg-gray-600 rounded-full flex items-center justify-center font-bebas text-white">
+                    <span className="flex-shrink-0 w-8 h-8 bg-gray-600 rounded-full flex items-center justify-center font-bold text-white">
                       {String.fromCharCode(65 + index)}
                     </span>
                     <span>{option}</span>
@@ -322,15 +401,15 @@ const MultiplayerGame = () => {
             </div>
 
             {hasAnswered && (
-              <div className="mt-4 text-center">
+              <div className="mt-4 text-center bonk-fade-in">
                 {selectedAnswer === currentQuestion.correct ? (
-                  <div className="bg-green-600/20 border border-green-400/50 rounded-xl p-4">
-                    <p className="font-bebas text-green-400 text-lg">🎉 CORRECT! Great job!</p>
+                  <div className="bonk-card-glow p-4 border-green-400/50 bg-green-600/20 bonk-bounce">
+                    <p className="font-bold text-green-400 text-lg">🎉 CORRECT! Great job!</p>
                   </div>
                 ) : (
-                  <div className="bg-red-600/20 border border-red-400/50 rounded-xl p-4">
-                    <p className="font-bebas text-red-400 text-lg">❌ Wrong answer</p>
-                    <p className="font-space text-gray-300 text-sm mt-1">
+                  <div className="bonk-card-glow p-4 border-red-400/50 bg-red-600/20">
+                    <p className="font-bold text-red-400 text-lg">❌ Wrong answer</p>
+                    <p className="text-gray-300 text-sm mt-1">
                       Correct answer: {String.fromCharCode(65 + currentQuestion.correct)} - {currentQuestion.options[currentQuestion.correct]}
                     </p>
                   </div>
@@ -341,8 +420,8 @@ const MultiplayerGame = () => {
         )}
 
         {leaderboard.length > 0 && (
-          <div className="bg-gray-900/60 rounded-xl p-4">
-            <h3 className="font-bebas text-lg text-yellow-400 mb-3 flex items-center gap-2">
+          <div className="bonk-card-glow p-4">
+            <h3 className="bonk-subtitle text-lg mb-3 flex items-center gap-2">
               <Trophy className="w-5 h-5" />
               LIVE LEADERBOARD
             </h3>
@@ -350,27 +429,33 @@ const MultiplayerGame = () => {
               {leaderboard.map((player, index) => (
                 <div 
                   key={player.id} 
-                  className={`flex justify-between items-center py-2 px-3 rounded-lg ${
-                    player.id === playerData?.id ? 'bg-yellow-400/20 border border-yellow-400/50' : 'bg-gray-800/40'
-                  }`}
+                  className={`bonk-leaderboard-item ${
+                    player.id === playerData?.id ? 'current-player' : ''
+                  } ${index < 3 ? 'top-3' : ''}`}
                 >
                   <div className="flex items-center gap-3">
-                    {index === 0 && <Crown className="w-4 h-4 text-yellow-400" />}
-                    <span className={`font-bebas text-lg ${
-                      index === 0 ? 'text-yellow-400' :
+                    {index === 0 && <Crown className="w-4 h-4 text-bonk-yellow" />}
+                    <span className={`font-bold text-lg ${
+                      index === 0 ? 'text-bonk-yellow' :
                       index === 1 ? 'text-gray-300' :
                       index === 2 ? 'text-orange-400' :
                       'text-gray-500'
                     }`}>
                       #{index + 1}
                     </span>
-                    <span className={`font-space ${
-                      player.id === playerData?.id ? 'text-yellow-400 font-bold' : 'text-white'
-                    }`}>
-                      {player.name}
-                    </span>
+                    <div className="flex flex-col">
+                      <span className={`${
+                        player.id === playerData?.id ? 'text-bonk-yellow font-bold' : 'text-white'
+                      }`}>
+                        {player.name}
+                      </span>
+                      <span className="text-gray-400 text-xs">
+                        {player.correctAnswers || 0}/{player.totalAnswers || 0} correct
+                        {player.accuracy ? ` (${player.accuracy}%)` : ''}
+                      </span>
+                    </div>
                   </div>
-                  <span className="font-bebas text-yellow-400">{player.score} pts</span>
+                  <span className="bonk-subtitle font-bold">{player.score} pts</span>
                 </div>
               ))}
             </div>
@@ -382,51 +467,132 @@ const MultiplayerGame = () => {
 
   if (activeRound.status === 'finished' && isInGame) {
     return (
-      <div className="bg-gray-800/40 backdrop-blur-sm rounded-2xl p-8 border border-gray-700 text-center">
-        <Trophy className="w-16 h-16 mx-auto mb-4 text-yellow-400" />
-        <h2 className="font-bebas text-3xl text-yellow-400 mb-4">ROUND FINISHED!</h2>
+      <div className="relative bonk-card bonk-fade-in p-8 text-center max-w-5xl mx-auto mt-20">
+        {/* BONK Characters for Finished Game */}
+        <BonkMultiplayerCharacter 
+          pose="excited" 
+          position="-left-20 top-1/4" 
+          className="hidden xl:block"
+          animate={true}
+        />
+        <BonkMultiplayerCharacter 
+          pose="thumbsUp" 
+          position="-right-20 top-1/4" 
+          className="hidden xl:block"
+          animate={true}
+        />
         
+        <Trophy className="w-16 h-16 mx-auto mb-4 text-bonk-yellow bonk-bounce" />
+        <h2 className="bonk-title text-3xl mb-6">🎉 ROUND COMPLETE!</h2>
+        
+        {/* Player's Personal Stats */}
+        {playerData && (
+          <div className="bonk-card-glow p-6 mb-6 border-bonk-yellow">
+            <h3 className="bonk-subtitle text-xl mb-4">YOUR PERFORMANCE</h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+              <div className="bonk-glass rounded-lg p-3 bonk-fade-in">
+                <div className="bonk-title text-2xl">{playerData.score}</div>
+                <div className="text-gray-300 text-sm">Total Points</div>
+              </div>
+              <div className="bonk-glass rounded-lg p-3 bonk-fade-in" style={{animationDelay: '0.1s'}}>
+                <div className="text-green-400 font-bold text-2xl">{playerData.correctAnswers || 0}</div>
+                <div className="text-gray-300 text-sm">Correct</div>
+              </div>
+              <div className="bonk-glass rounded-lg p-3 bonk-fade-in" style={{animationDelay: '0.2s'}}>
+                <div className="text-blue-400 font-bold text-2xl">{playerData.accuracy || 0}%</div>
+                <div className="text-gray-300 text-sm">Accuracy</div>
+              </div>
+              <div className="bonk-glass rounded-lg p-3 bonk-fade-in" style={{animationDelay: '0.3s'}}>
+                <div className="text-purple-400 font-bold text-2xl">#{playerData.rank || '?'}</div>
+                <div className="text-gray-300 text-sm">Final Rank</div>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* Final Leaderboard */}
         {leaderboard.length > 0 && (
-          <div className="bg-gray-900/60 rounded-xl p-6 mb-6">
-            <h3 className="font-bebas text-xl text-yellow-400 mb-4">FINAL RESULTS</h3>
+          <div className="bonk-card-glow p-6 mb-6">
+            <h3 className="bonk-subtitle text-xl mb-4">🏆 FINAL LEADERBOARD</h3>
             <div className="space-y-3">
-              {leaderboard.slice(0, 5).map((player, index) => (
+              {leaderboard.slice(0, 10).map((player, index) => (
                 <div 
                   key={player.id} 
-                  className={`flex justify-between items-center py-3 px-4 rounded-lg ${
-                    player.id === playerData?.id ? 'bg-yellow-400/20 border border-yellow-400/50' : 'bg-gray-800/40'
-                  }`}
+                  className={`bonk-leaderboard-item ${
+                    player.id === playerData?.id 
+                      ? 'current-player bonk-glow' 
+                      : index < 3 
+                        ? 'top-3' 
+                        : ''
+                  } bonk-slide-in`}
+                  style={{animationDelay: `${index * 0.1}s`}}
                 >
-                  <div className="flex items-center gap-3">
-                    {index < 3 && (
-                      <span className="text-2xl">
-                        {index === 0 ? '🥇' : index === 1 ? '🥈' : '🥉'}
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2">
+                      {index < 3 && (
+                        <span className="text-2xl">
+                          {index === 0 ? '🥇' : index === 1 ? '🥈' : '🥉'}
+                        </span>
+                      )}
+                      <span className={`font-bold text-xl ${
+                        index === 0 ? 'text-bonk-yellow' :
+                        index === 1 ? 'text-gray-300' :
+                        index === 2 ? 'text-orange-400' :
+                        'text-gray-500'
+                      }`}>
+                        #{index + 1}
                       </span>
-                    )}
-                    <span className={`font-bebas text-lg ${
-                      index === 0 ? 'text-yellow-400' :
-                      index === 1 ? 'text-gray-300' :
-                      index === 2 ? 'text-orange-400' :
-                      'text-gray-500'
-                    }`}>
-                      #{index + 1}
-                    </span>
-                    <span className={`font-space ${
-                      player.id === playerData?.id ? 'text-yellow-400 font-bold' : 'text-white'
-                    }`}>
-                      {player.name}
-                    </span>
+                    </div>
+                    
+                    <div className="flex flex-col items-start">
+                      <span className={`text-lg ${
+                        player.id === playerData?.id ? 'text-bonk-yellow font-bold' : 'text-white'
+                      }`}>
+                        {player.name}
+                      </span>
+                      <div className="flex gap-4 text-xs">
+                        <span className="text-green-400">
+                          ✓ {player.correctAnswers || 0}/{player.totalAnswers || 0}
+                        </span>
+                        <span className="text-blue-400">
+                          {player.accuracy || 0}% accuracy
+                        </span>
+                        {player.averageTime && (
+                          <span className="text-purple-400">
+                            ~{player.averageTime}s avg
+                          </span>
+                        )}
+                      </div>
+                      {player.solanaAddress && (
+                        <span className="text-gray-400 text-xs mt-1">
+                          {player.solanaAddress.slice(0, 8)}...{player.solanaAddress.slice(-8)}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <span className="font-bebas text-yellow-400 text-lg">{player.score} pts</span>
+                  
+                  <div className="text-right">
+                    <div className="bonk-subtitle text-xl">{player.score}</div>
+                    <div className="text-gray-400 text-xs">points</div>
+                  </div>
                 </div>
               ))}
             </div>
           </div>
         )}
 
+        {/* Prize Pool Info */}
+        <div className="bg-bonk-gradient/10 border border-bonk-yellow/30 rounded-xl p-4 mb-6 bonk-glow">
+          <h4 className="bonk-subtitle text-lg mb-2">💰 PRIZE DISTRIBUTION</h4>
+          <p className="text-gray-300 text-sm">
+            Prizes will be distributed to Solana wallets based on final rankings.
+            Check your wallet in the next 24 hours!
+          </p>
+        </div>
+
         <button
           onClick={leaveRound}
-          className="font-bebas bg-yellow-400 text-gray-900 py-3 px-8 rounded-xl hover:bg-yellow-300 transition-all"
+          className="bonk-btn bonk-glow"
         >
           RETURN TO LOBBY
         </button>
@@ -436,13 +602,25 @@ const MultiplayerGame = () => {
 
   if (activeRound.status === 'playing' && !isInGame) {
     return (
-      <div className="bg-gray-800/40 backdrop-blur-sm rounded-2xl p-8 border border-gray-700 text-center">
-        <Clock className="w-16 h-16 mx-auto mb-4 text-red-400" />
-        <h2 className="font-bebas text-3xl text-red-400 mb-2">ROUND IN PROGRESS</h2>
-        <p className="font-space text-gray-300 mb-4">
+      <div className="relative bonk-card bonk-fade-in p-8 text-center max-w-2xl mx-auto mt-20">
+        {/* BONK Characters for Round in Progress */}
+        <BonkMultiplayerCharacter 
+          pose="relaxed" 
+          position="-left-16 top-1/2 transform -translate-y-1/2" 
+          className="hidden lg:block"
+        />
+        <BonkMultiplayerCharacter 
+          pose="relaxed" 
+          position="-right-16 top-1/2 transform -translate-y-1/2" 
+          className="hidden lg:block"
+        />
+        
+        <Clock className="w-16 h-16 mx-auto mb-4 text-red-400 bonk-pulse" />
+        <h2 className="text-red-400 text-3xl font-bold mb-2">ROUND IN PROGRESS</h2>
+        <p className="text-gray-300 mb-4">
           A multiplayer round is currently active, but you can't join mid-game.
         </p>
-        <p className="font-space text-gray-500">
+        <p className="text-gray-500">
           Wait for the current round to finish!
         </p>
       </div>

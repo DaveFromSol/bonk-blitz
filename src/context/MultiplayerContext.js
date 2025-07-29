@@ -1,5 +1,5 @@
 // context/MultiplayerContext.js
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { 
   collection, 
   doc, 
@@ -13,7 +13,8 @@ import {
   serverTimestamp,
   arrayUnion,
   arrayRemove,
-  getDocs
+  getDocs,
+  getDoc
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useGame } from './GameContext';
@@ -41,6 +42,11 @@ export const MultiplayerProvider = ({ children }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [roundStartCountdown, setRoundStartCountdown] = useState(null);
+  
+  // Timer refs to manage intervals
+  const questionTimerRef = useRef(null);
+  const hasAnsweredRef = useRef(false);
+  const isAdvancingRef = useRef(false); // Prevent multiple advances
 
   // Debug: Log state changes
   useEffect(() => {
@@ -60,6 +66,14 @@ export const MultiplayerProvider = ({ children }) => {
     const shuffled = [...filteredQuestions].sort(() => 0.5 - Math.random());
     return shuffled.slice(0, count);
   };
+
+  // Clear question timer
+  const clearQuestionTimer = useCallback(() => {
+    if (questionTimerRef.current) {
+      clearInterval(questionTimerRef.current);
+      questionTimerRef.current = null;
+    }
+  }, []);
 
   // ADMIN FUNCTIONS - Define these first before useEffect that depends on them
 
@@ -135,6 +149,8 @@ export const MultiplayerProvider = ({ children }) => {
   const endRound = useCallback(async (roundId) => {
     try {
       setLoading(true);
+      clearQuestionTimer(); // Clear timer when round ends
+      
       const roundRef = doc(db, 'multiplayerRounds', roundId);
       
       await updateDoc(roundRef, {
@@ -149,33 +165,48 @@ export const MultiplayerProvider = ({ children }) => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [clearQuestionTimer]);
 
   // Next question (Admin only)
   const nextQuestion = useCallback(async (roundId) => {
     try {
       const roundRef = doc(db, 'multiplayerRounds', roundId);
-      const newIndex = (activeRound?.currentQuestionIndex || 0) + 1;
       
-      if (newIndex >= (activeRound?.questionCount || 10)) {
+      // Get current data from Firebase instead of relying on state
+      const roundDoc = await getDoc(roundRef);
+      
+      if (!roundDoc.exists()) {
+        throw new Error('Round not found');
+      }
+      
+      const currentRoundData = roundDoc.data();
+      const newIndex = (currentRoundData.currentQuestionIndex || 0) + 1;
+      
+      console.log('nextQuestion: current index:', currentRoundData.currentQuestionIndex, 'new index:', newIndex);
+      
+      if (newIndex >= (currentRoundData.questionCount || 10)) {
         // End game if all questions answered
+        console.log('All questions completed, ending round');
         await endRound(roundId);
       } else {
+        console.log('Advancing to question:', newIndex);
         await updateDoc(roundRef, {
           currentQuestionIndex: newIndex,
           updatedAt: serverTimestamp()
         });
       }
     } catch (err) {
+      console.error('Error in nextQuestion:', err);
       setError('Failed to advance question: ' + err.message);
       throw err;
     }
-  }, [activeRound?.currentQuestionIndex, activeRound?.questionCount, endRound]);
+  }, [endRound]);
 
   // Delete round (Admin only)
   const deleteRound = useCallback(async (roundId) => {
     try {
       setLoading(true);
+      clearQuestionTimer(); // Clear timer when round is deleted
       console.log('Deleting round:', roundId);
       await deleteDoc(doc(db, 'multiplayerRounds', roundId));
       console.log('Round deleted successfully');
@@ -186,7 +217,33 @@ export const MultiplayerProvider = ({ children }) => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [clearQuestionTimer]);
+
+  // Start question timer - defined after nextQuestion to avoid circular dependency
+  const startQuestionTimer = useCallback((initialTime, roundId) => {
+    clearQuestionTimer();
+    hasAnsweredRef.current = false;
+    isAdvancingRef.current = false; // Reset advancing flag
+    
+    let currentTime = initialTime;
+    setTimeLeft(currentTime);
+    
+    questionTimerRef.current = setInterval(() => {
+      currentTime -= 1;
+      setTimeLeft(currentTime);
+      
+      if (currentTime <= 0) {
+        clearQuestionTimer();
+        // Auto-advance to next question when time runs out
+        if (roundId && !isAdvancingRef.current) {
+          isAdvancingRef.current = true;
+          setTimeout(() => {
+            nextQuestion(roundId);
+          }, 2000); // 2 second delay to show results
+        }
+      }
+    }, 1000);
+  }, [clearQuestionTimer, nextQuestion]);
 
   // Listen for active rounds
   useEffect(() => {
@@ -226,29 +283,37 @@ export const MultiplayerProvider = ({ children }) => {
       } else {
         console.log('No active rounds found');
         setActiveRound(null);
+        clearQuestionTimer(); // Clear timer if no active rounds
       }
     }, (error) => {
       console.error('Error listening to rounds:', error);
     });
 
     return unsubscribe;
-  }, []);
+  }, [clearQuestionTimer]);
 
-  // Listen for current question updates
+  // Listen for current question updates and start timer
   useEffect(() => {
     if (activeRound && activeRound.status === 'playing') {
       const questions = activeRound.questions || [];
       const questionIndex = activeRound.currentQuestionIndex || 0;
       
       if (questions[questionIndex]) {
+        console.log('Setting new question and starting timer:', questionIndex);
         setCurrentQuestion(questions[questionIndex]);
         setCurrentQuestionIndex(questionIndex);
-        setTimeLeft(activeRound.timePerQuestion || 15);
+        
+        // Start the question timer
+        const timePerQuestion = activeRound.timePerQuestion || 15;
+        startQuestionTimer(timePerQuestion, activeRound.id);
       }
+    } else if (activeRound && activeRound.status === 'finished') {
+      clearQuestionTimer();
+      setTimeLeft(0);
     }
-  }, [activeRound]);
+  }, [activeRound?.status, activeRound?.currentQuestionIndex, activeRound?.id, startQuestionTimer, clearQuestionTimer]);
 
-  // Countdown timer for round start - NOW startRound is available
+  // Countdown timer for round start
   useEffect(() => {
     if (activeRound?.status === 'waiting' && activeRound.scheduledStartTime) {
       const updateCountdown = () => {
@@ -273,6 +338,13 @@ export const MultiplayerProvider = ({ children }) => {
     }
   }, [activeRound?.status, activeRound?.scheduledStartTime, activeRound?.id, startRound]);
 
+  // Cleanup timers on unmount
+  useEffect(() => {
+    return () => {
+      clearQuestionTimer();
+    };
+  }, [clearQuestionTimer]);
+
   // Generate player name
   const generatePlayerName = () => {
     const adjectives = ['Quick', 'Smart', 'Fast', 'Clever', 'Sharp', 'Bright', 'Swift', 'Keen'];
@@ -283,7 +355,7 @@ export const MultiplayerProvider = ({ children }) => {
   // PLAYER FUNCTIONS
 
   // Join the active round
-  const joinRound = async (playerName = null) => {
+  const joinRound = async (playerName = null, solanaAddress = null) => {
     try {
       if (!activeRound) {
         throw new Error('No active round to join');
@@ -295,9 +367,10 @@ export const MultiplayerProvider = ({ children }) => {
       const player = {
         id: Date.now().toString(),
         name: playerName || generatePlayerName(),
+        solanaAddress: solanaAddress || '',
         score: 0,
         answers: [],
-        joinedAt: new Date().toISOString() // Use regular timestamp instead of serverTimestamp
+        joinedAt: new Date().toISOString()
       };
 
       const roundRef = doc(db, 'multiplayerRounds', activeRound.id);
@@ -334,6 +407,7 @@ export const MultiplayerProvider = ({ children }) => {
       setPlayerData(null);
       setIsInGame(false);
       setPlayerAnswers([]);
+      clearQuestionTimer(); // Clear timer when leaving
 
     } catch (err) {
       setError('Failed to leave round: ' + err.message);
@@ -344,19 +418,39 @@ export const MultiplayerProvider = ({ children }) => {
   const submitAnswer = async (answerIndex, timeTaken) => {
     try {
       if (!activeRound || !playerData || !currentQuestion) return;
+      if (hasAnsweredRef.current) return; // Prevent double submission
+
+      hasAnsweredRef.current = true;
 
       const isCorrect = answerIndex === currentQuestion.correct;
-      const points = isCorrect ? Math.max(1, Math.round(10 * (timeLeft / (activeRound.timePerQuestion || 15)))) : 0;
+      // Enhanced scoring: more points for faster answers, bonus for streaks
+      const timeBonus = Math.max(1, Math.round(10 * (timeLeft / (activeRound.timePerQuestion || 15))));
+      const basePoints = isCorrect ? timeBonus : 0;
+      
+      // Speed bonus: extra points for very fast answers (within first 25% of time)
+      const speedThreshold = (activeRound.timePerQuestion || 15) * 0.75;
+      const speedBonus = isCorrect && timeLeft >= speedThreshold ? 2 : 0;
+      
+      const totalPoints = basePoints + speedBonus;
 
       const answer = {
         questionIndex: currentQuestionIndex,
-        questionId: currentQuestion.id,
+        questionId: currentQuestion.id || currentQuestionIndex,
         answer: answerIndex,
         correct: isCorrect,
-        points: points,
+        points: totalPoints,
         timeTaken: timeTaken,
-        timestamp: serverTimestamp()
+        timeLeft: timeLeft,
+        timestamp: new Date().toISOString() // Use regular timestamp for better compatibility
       };
+
+      console.log('Submitting answer:', {
+        questionIndex: currentQuestionIndex,
+        isCorrect,
+        points: totalPoints,
+        timeLeft,
+        playerName: playerData.name
+      });
 
       // Update player answers locally
       setPlayerAnswers(prev => [...prev, answer]);
@@ -365,8 +459,9 @@ export const MultiplayerProvider = ({ children }) => {
       const roundRef = doc(db, 'multiplayerRounds', activeRound.id);
       const updatedPlayer = {
         ...playerData,
-        score: playerData.score + points,
-        answers: [...playerData.answers, answer]
+        score: playerData.score + totalPoints,
+        answers: [...(playerData.answers || []), answer],
+        lastAnswerTime: new Date().toISOString()
       };
 
       // Remove old player data and add updated version
@@ -381,21 +476,50 @@ export const MultiplayerProvider = ({ children }) => {
 
       setPlayerData(updatedPlayer);
 
+      console.log('Answer submitted successfully. New score:', updatedPlayer.score);
+
     } catch (err) {
+      console.error('Error submitting answer:', err);
       setError('Failed to submit answer: ' + err.message);
     }
   };
 
-  // Calculate leaderboard
+  // Calculate leaderboard with enhanced stats
   useEffect(() => {
     if (activeRound?.players) {
       const sortedPlayers = [...activeRound.players]
-        .sort((a, b) => b.score - a.score)
+        .map(player => {
+          const answers = player.answers || [];
+          const correctAnswers = answers.filter(a => a.correct).length;
+          const totalAnswers = answers.length;
+          const accuracy = totalAnswers > 0 ? Math.round((correctAnswers / totalAnswers) * 100) : 0;
+          const averageTime = totalAnswers > 0 
+            ? Math.round(answers.reduce((sum, a) => sum + (a.timeTaken || 0), 0) / totalAnswers * 100) / 100
+            : 0;
+
+          return {
+            ...player,
+            correctAnswers,
+            totalAnswers,
+            accuracy,
+            averageTime,
+            // Tie-breaker: higher accuracy, then faster average time
+            tieBreaker: accuracy * 1000 + (100 - averageTime)
+          };
+        })
+        .sort((a, b) => {
+          // Primary sort by score
+          if (b.score !== a.score) return b.score - a.score;
+          // Tie-breaker: accuracy then speed
+          return b.tieBreaker - a.tieBreaker;
+        })
         .map((player, index) => ({
           ...player,
           rank: index + 1
         }));
+      
       setLeaderboard(sortedPlayers);
+      console.log('Updated leaderboard:', sortedPlayers);
     }
   }, [activeRound?.players]);
 
