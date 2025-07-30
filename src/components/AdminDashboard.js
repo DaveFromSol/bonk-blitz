@@ -1,10 +1,12 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { 
-  Settings, Plus, Edit3, Trash2, Target, Search, Save, X, LogOut, User
+  Settings, Plus, Edit3, Trash2, Target, Search, Save, X, LogOut, User, BarChart3, Trophy, Brain
 } from 'lucide-react';
 import { useGame } from '../context/GameContext';
 import { useAuth } from '../context/AuthContext';
 import AdminMultiplayerControls from './AdminMultiplayerControls';
+import AIQuestionGenerator from './AIQuestionGenerator';
+import RoundHistory from './RoundHistory';
 
 // Extracted QuestionModal as a separate component to prevent recreation
 const QuestionModal = ({ 
@@ -133,6 +135,7 @@ const QuestionModal = ({
 const AdminDashboard = () => {
   const { state, actions } = useGame();
   const { logout, user } = useAuth();
+  const [activeTab, setActiveTab] = useState('multiplayer');
   const [showQuestionModal, setShowQuestionModal] = useState(false);
   const [editingQuestion, setEditingQuestion] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -231,6 +234,12 @@ const AdminDashboard = () => {
     }
   }, [actions]);
 
+  // Handle AI questions generated
+  const handleAIQuestionsGenerated = useCallback((count) => {
+    // You can add any additional logic here, like showing a success message
+    console.log(`Successfully added ${count} AI-generated questions`);
+  }, []);
+
   // Memoized QuestionRow component to prevent unnecessary re-renders
   const QuestionRow = React.memo(({ question }) => {
     const questionStats = actions.getQuestionStats(question.id);
@@ -241,6 +250,11 @@ const AdminDashboard = () => {
           <div className="font-space font-semibold text-white">{question.question}</div>
           <div className="font-space text-sm text-gray-400 mt-1">
             <span className="capitalize">{question.category}</span> • {question.difficulty}
+            {question.aiGenerated && (
+              <span className="ml-2 px-2 py-1 bg-purple-600/20 text-purple-400 text-xs rounded-full">
+                AI Generated
+              </span>
+            )}
           </div>
         </td>
         <td className="p-4 text-center">
@@ -315,13 +329,15 @@ const AdminDashboard = () => {
               </div>
               
               {/* Actions */}
-              <button 
-                onClick={openNewQuestionModal}
-                className="font-bebas bg-yellow-400 text-gray-900 py-2 px-6 rounded-xl hover:bg-yellow-300 transition-all transform hover:scale-105 flex items-center space-x-2"
-              >
-                <Plus className="w-5 h-5" />
-                <span>ADD QUESTION</span>
-              </button>
+              {activeTab === 'questions' && (
+                <button 
+                  onClick={openNewQuestionModal}
+                  className="font-bebas bg-yellow-400 text-gray-900 py-2 px-6 rounded-xl hover:bg-yellow-300 transition-all transform hover:scale-105 flex items-center space-x-2"
+                >
+                  <Plus className="w-5 h-5" />
+                  <span>ADD QUESTION</span>
+                </button>
+              )}
               
               {/* Logout Button */}
               <button 
@@ -333,83 +349,153 @@ const AdminDashboard = () => {
               </button>
             </div>
           </div>
+
+          {/* Navigation Tabs */}
+          <div className="mt-6 flex space-x-1 bg-gray-800/60 rounded-xl p-1">
+            <button
+              onClick={() => setActiveTab('multiplayer')}
+              className={`font-bebas flex-1 py-3 px-4 rounded-lg transition-all flex items-center justify-center gap-2 ${
+                activeTab === 'multiplayer'
+                  ? 'bg-yellow-400 text-gray-900'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-700/60'
+              }`}
+            >
+              <Settings className="w-5 h-5" />
+              MULTIPLAYER CONTROL
+            </button>
+            <button
+              onClick={() => setActiveTab('history')}
+              className={`font-bebas flex-1 py-3 px-4 rounded-lg transition-all flex items-center justify-center gap-2 ${
+                activeTab === 'history'
+                  ? 'bg-yellow-400 text-gray-900'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-700/60'
+              }`}
+            >
+              <Trophy className="w-5 h-5" />
+              ROUND HISTORY
+            </button>
+            <button
+              onClick={() => setActiveTab('ai-generator')}
+              className={`font-bebas flex-1 py-3 px-4 rounded-lg transition-all flex items-center justify-center gap-2 ${
+                activeTab === 'ai-generator'
+                  ? 'bg-purple-400 text-gray-900'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-700/60'
+              }`}
+            >
+              <Brain className="w-5 h-5" />
+              AI GENERATOR
+            </button>
+            <button
+              onClick={() => setActiveTab('questions')}
+              className={`font-bebas flex-1 py-3 px-4 rounded-lg transition-all flex items-center justify-center gap-2 ${
+                activeTab === 'questions'
+                  ? 'bg-yellow-400 text-gray-900'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-700/60'
+              }`}
+            >
+              <Target className="w-5 h-5" />
+              QUESTION BANK
+            </button>
+          </div>
         </div>
       </header>
 
       {/* Main Content */}
       <main className="p-6">
-        {/* Multiplayer Controls */}
-        <AdminMultiplayerControls />
+        {/* Multiplayer Controls Tab */}
+        {activeTab === 'multiplayer' && <AdminMultiplayerControls />}
 
-        {/* Filters */}
-        <div className="bg-gray-800/60 backdrop-blur-md rounded-xl p-4 border border-gray-700 mb-6">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
-              <input
-                type="text"
-                placeholder="Search questions..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="font-space w-full pl-10 pr-4 py-2 bg-gray-900 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:border-yellow-400/50 focus:outline-none transition-colors"
-              />
-            </div>
-            <select
-              value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
-              className="font-space px-4 py-2 bg-gray-900 border border-gray-700 rounded-xl text-white focus:border-yellow-400/50 focus:outline-none transition-colors"
-            >
-              <option value="all" className="bg-gray-800">All Categories</option>
-              {categories.map(cat => (
-                <option key={cat} value={cat} className="bg-gray-800 capitalize">{cat}</option>
-              ))}
-            </select>
-            <div className="font-space text-gray-400 flex items-center px-3">
-              {filteredQuestions.length} questions
-            </div>
-          </div>
-        </div>
+        {/* Round History Tab */}
+        {activeTab === 'history' && <RoundHistory />}
 
-        {/* Questions Table */}
-        <div className="bg-gray-800/60 backdrop-blur-md rounded-xl border border-gray-700 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-900/60 border-b border-gray-700">
-                <tr>
-                  <th className="font-space text-left p-4 font-bold text-white">Question</th>
-                  <th className="font-space text-center p-4 font-bold text-white">Asked</th>
-                  <th className="font-space text-center p-4 font-bold text-white">Correct %</th>
-                  <th className="font-space text-right p-4 font-bold text-white">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredQuestions.map(question => (
-                  <QuestionRow key={question.id} question={question} />
-                ))}
-              </tbody>
-            </table>
-            
-            {filteredQuestions.length === 0 && (
-              <div className="font-space text-center py-12 text-gray-500">
-                {state.questions.length === 0 ? (
-                  <div>
-                    <Target className="w-16 h-16 mx-auto mb-4 text-gray-600" />
-                    <h3 className="font-bebas text-2xl text-gray-400 mb-2">NO QUESTIONS YET</h3>
-                    <p className="text-gray-500 mb-4">Add your first question to get started!</p>
-                    <button 
-                      onClick={openNewQuestionModal}
-                      className="font-bebas bg-yellow-400 text-gray-900 py-2 px-6 rounded-xl hover:bg-yellow-300 transition-all"
-                    >
-                      ADD FIRST QUESTION
-                    </button>
+        {/* AI Generator Tab */}
+        {activeTab === 'ai-generator' && (
+          <AIQuestionGenerator onQuestionsGenerated={handleAIQuestionsGenerated} />
+        )}
+
+        {/* Questions Tab */}
+        {activeTab === 'questions' && (
+          <>
+            {/* Filters */}
+            <div className="bg-gray-800/60 backdrop-blur-md rounded-xl p-4 border border-gray-700 mb-6">
+              <div className="flex flex-col sm:flex-row gap-4">
+                <div className="flex-1 relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
+                  <input
+                    type="text"
+                    placeholder="Search questions..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="font-space w-full pl-10 pr-4 py-2 bg-gray-900 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:border-yellow-400/50 focus:outline-none transition-colors"
+                  />
+                </div>
+                <select
+                  value={categoryFilter}
+                  onChange={(e) => setCategoryFilter(e.target.value)}
+                  className="font-space px-4 py-2 bg-gray-900 border border-gray-700 rounded-xl text-white focus:border-yellow-400/50 focus:outline-none transition-colors"
+                >
+                  <option value="all" className="bg-gray-800">All Categories</option>
+                  {categories.map(cat => (
+                    <option key={cat} value={cat} className="bg-gray-800 capitalize">{cat}</option>
+                  ))}
+                </select>
+                <div className="font-space text-gray-400 flex items-center px-3">
+                  {filteredQuestions.length} questions
+                </div>
+              </div>
+            </div>
+
+            {/* Questions Table */}
+            <div className="bg-gray-800/60 backdrop-blur-md rounded-xl border border-gray-700 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-900/60 border-b border-gray-700">
+                    <tr>
+                      <th className="font-space text-left p-4 font-bold text-white">Question</th>
+                      <th className="font-space text-center p-4 font-bold text-white">Asked</th>
+                      <th className="font-space text-center p-4 font-bold text-white">Correct %</th>
+                      <th className="font-space text-right p-4 font-bold text-white">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredQuestions.map(question => (
+                      <QuestionRow key={question.id} question={question} />
+                    ))}
+                  </tbody>
+                </table>
+                
+                {filteredQuestions.length === 0 && (
+                  <div className="font-space text-center py-12 text-gray-500">
+                    {state.questions.length === 0 ? (
+                      <div>
+                        <Target className="w-16 h-16 mx-auto mb-4 text-gray-600" />
+                        <h3 className="font-bebas text-2xl text-gray-400 mb-2">NO QUESTIONS YET</h3>
+                        <p className="text-gray-500 mb-4">Add your first question manually or use AI generation!</p>
+                        <div className="flex gap-4 justify-center">
+                          <button 
+                            onClick={openNewQuestionModal}
+                            className="font-bebas bg-yellow-400 text-gray-900 py-2 px-6 rounded-xl hover:bg-yellow-300 transition-all"
+                          >
+                            ADD MANUALLY
+                          </button>
+                          <button 
+                            onClick={() => setActiveTab('ai-generator')}
+                            className="font-bebas bg-purple-600 text-white py-2 px-6 rounded-xl hover:bg-purple-700 transition-all flex items-center gap-2"
+                          >
+                            <Brain className="w-4 h-4" />
+                            USE AI GENERATOR
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      'No questions match your filters.'
+                    )}
                   </div>
-                ) : (
-                  'No questions match your filters.'
                 )}
               </div>
-            )}
-          </div>
-        </div>
+            </div>
+          </>
+        )}
       </main>
 
       {/* Question Modal */}

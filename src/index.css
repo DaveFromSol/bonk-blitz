@@ -162,6 +162,58 @@
     color: var(--bonk-white);
   }
   
+  /* Official BONK Form Styles */
+  .bonk-form {
+    @apply rounded-xl border backdrop-blur-sm;
+    background: var(--bonk-black);
+    border-color: rgba(255, 255, 255, 0.2);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    color: var(--bonk-white);
+  }
+  
+  .bonk-form-white {
+    @apply rounded-xl border backdrop-blur-sm;
+    background: rgba(255, 255, 255, 0.95);
+    border-color: var(--bonk-orange);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    color: var(--bonk-black);
+  }
+  
+  /* Official BONK Input Styles */
+  .bonk-input {
+    @apply w-full p-3 rounded-xl border transition-all duration-300;
+    font-family: 'Roboto', 'Helvetica', 'Arial', sans-serif;
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.3);
+    color: var(--bonk-white);
+  }
+  
+  .bonk-input:focus {
+    border-color: var(--bonk-yellow);
+    box-shadow: 0 0 10px rgba(255, 211, 2, 0.4);
+    outline: none;
+    background: rgba(255, 255, 255, 0.15);
+  }
+  
+  .bonk-input::placeholder {
+    color: rgba(255, 255, 255, 0.6);
+  }
+  
+  .bonk-input-light {
+    @apply w-full p-3 rounded-xl border transition-all duration-300;
+    font-family: 'Roboto', 'Helvetica', 'Arial', sans-serif;
+    background: rgba(255, 255, 255, 0.9);
+    border-color: var(--bonk-orange);
+    color: var(--bonk-black);
+  }
+  
+  .bonk-input-light:focus {
+    border-color: var(--bonk-red);
+    box-shadow: 0 0 10px rgba(255, 0, 0, 0.3);
+    outline: none;
+    background: var(--bonk-white);
+  }
+  
   /* Official BONK Badge Styles */
   .bonk-badge {
     @apply px-4 py-2 rounded-xl font-bold text-center;
@@ -191,6 +243,71 @@
     background: transparent;
     color: var(--bonk-white);
     border: 4px solid var(--bonk-white);
+  }
+  
+  /* Official BONK Answer Button Styles */
+  .bonk-answer-btn {
+    @apply w-full p-4 rounded-xl font-medium text-left transition-all duration-300 transform border-2;
+    font-family: 'Roboto', 'Helvetica', 'Arial', sans-serif;
+    background: var(--bonk-navy);
+    border-color: rgba(255, 255, 255, 0.3);
+    color: var(--bonk-white);
+    position: relative;
+    overflow: hidden;
+  }
+  
+  .bonk-answer-btn:hover {
+    border-color: var(--bonk-yellow);
+    background: rgba(255, 211, 2, 0.1);
+    transform: scale(1.02);
+  }
+  
+  .bonk-answer-correct {
+    @apply w-full p-4 rounded-xl font-medium text-left transition-all duration-300 transform border-2;
+    font-family: 'Roboto', 'Helvetica', 'Arial', sans-serif;
+    background: rgba(34, 197, 94, 0.2);
+    border-color: #22c55e;
+    color: var(--bonk-white);
+  }
+  
+  .bonk-answer-wrong {
+    @apply w-full p-4 rounded-xl font-medium text-left transition-all duration-300 transform border-2;
+    font-family: 'Roboto', 'Helvetica', 'Arial', sans-serif;
+    background: rgba(255, 0, 0, 0.2);
+    border-color: var(--bonk-red);
+    color: var(--bonk-white);
+  }
+  
+  .bonk-answer-disabled {
+    @apply w-full p-4 rounded-xl font-medium text-left transition-all duration-300 transform border-2;
+    font-family: 'Roboto', 'Helvetica', 'Arial', sans-serif;
+    background: rgba(107, 114, 128, 0.3);
+    border-color: #6b7280;
+    color: rgba(255, 255, 255, 0.5);
+  }
+  
+  /* Official BONK Leaderboard Styles */
+  .bonk-leaderboard-item {
+    @apply flex justify-between items-center py-3 px-4 rounded-lg transition-all duration-300;
+    background: var(--bonk-navy);
+    color: var(--bonk-white);
+  }
+  
+  .bonk-leaderboard-item:hover {
+    background: rgba(31, 41, 55, 0.8);
+    transform: translateX(4px);
+  }
+  
+  .bonk-leaderboard-item.current-player {
+    background: linear-gradient(to right, var(--bonk-orange), var(--bonk-yellow));
+    color: var(--bonk-white);
+    font-weight: bold;
+    box-shadow: 0 0 15px rgba(255, 211, 2, 0.3);
+  }
+  
+  .bonk-leaderboard-item.top-3 {
+    background: var(--bonk-black);
+    border: 1px solid var(--bonk-orange);
   }
 }
 
@@ -235,6 +352,17 @@
     }
   }
   
+  @keyframes bonkSlideIn {
+    0% { 
+      transform: translateX(-100%); 
+      opacity: 0; 
+    }
+    100% { 
+      transform: translateX(0); 
+      opacity: 1; 
+    }
+  }
+  
   @keyframes bonkFadeIn {
     0% { 
       opacity: 0; 
@@ -257,6 +385,10 @@
   
   .bonk-pulse { 
     animation: bonkPulse 1.5s ease-in-out infinite; 
+  }
+  
+  .bonk-slide-in { 
+    animation: bonkSlideIn 0.5s ease-out; 
   }
   
   .bonk-fade-in { 
@@ -309,4 +441,101 @@
       0 0 20px rgba(255, 211, 2, 0.4),
       0 0 40px rgba(255, 92, 1, 0.3);
   }
+  
+  /* Official BONK Loading spinner */
+  .bonk-spinner {
+    border: 3px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    border-top: 3px solid var(--bonk-orange);
+    width: 24px;
+    height: 24px;
+    animation: spin 1s linear infinite;
+  }
+  
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+}
+
+/* Enhanced button animations */
+.bonk-btn, .bonk-btn-primary, .bonk-btn-secondary {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transform-origin: center;
+}
+
+.bonk-btn:hover, .bonk-btn-primary:hover, .bonk-btn-secondary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(255, 211, 2, 0.4);
+}
+
+.bonk-btn:active, .bonk-btn-primary:active, .bonk-btn-secondary:active {
+  transform: translateY(0);
+  transition-duration: 0.1s;
+}
+
+/* Enhanced answer button styles */
+.bonk-answer-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 211, 2, 0.2), transparent);
+  transition: left 0.5s;
+}
+
+.bonk-answer-btn:hover::before {
+  left: 100%;
+}
+
+/* Enhanced card styles */
+.bonk-card {
+  backdrop-filter: blur(12px);
+  background: rgba(31, 41, 55, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.bonk-card-glow {
+  background: rgba(31, 41, 55, 0.8);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 211, 2, 0.3);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 0 20px rgba(255, 211, 2, 0.1);
+}
+
+.bonk-glass {
+  background: rgba(31, 41, 55, 0.6);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Enhanced typography */
+.bonk-title {
+  font-family: 'Bebas Neue', cursive;
+  letter-spacing: 0.1em;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.bonk-subtitle {
+  font-family: 'Bebas Neue', cursive;
+  letter-spacing: 0.05em;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+/* Footer styles - Official BONK dark gradients */
+.bonk-footer {
+  background: linear-gradient(to bottom, var(--bonk-black) 0%, var(--bonk-navy) 100%);
+  color: var(--bonk-white);
+}
+
+.bonk-footer-alt {
+  background: linear-gradient(to bottom, var(--bonk-navy) 0%, var(--bonk-black) 100%);
+  color: var(--bonk-white);
+}
+
+.bonk-footer-red {
+  background: linear-gradient(to bottom, var(--bonk-dark-red) 0%, var(--bonk-red) 100%);
+  color: var(--bonk-white);
 }
