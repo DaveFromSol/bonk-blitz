@@ -2,31 +2,8 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { Clock, Zap, Trophy, Users, Coins, Play, RefreshCw, Star, Target, Flame, Award, ChevronRight, Timer, TrendingUp } from 'lucide-react';
 import { useGame } from '../context/GameContext';
 import MultiplayerGame from './MultiplayerGame';
+import BonkCyberBackrooms from './BonkCyberBackrooms';
 import { useMultiplayer } from '../context/MultiplayerContext';
-
-// BONK Character Component
-const BonkCharacter = ({ imageFile, position, className = "", animate = false, gameState = 'idle' }) => {
-  return (
-    <div 
-      className={`fixed ${position} ${className} ${animate ? 'bonk-bounce' : ''} transition-all duration-500 z-10 pointer-events-none`}
-      style={{ 
-        filter: 'drop-shadow(4px 4px 8px rgba(0,0,0,0.4))',
-        transform: animate ? 'scale(1.1)' : 'scale(1)'
-      }}
-    >
-      <img 
-        src={`/${imageFile}`}
-        alt="BONK Character" 
-        className="w-32 h-32 md:w-40 md:h-40 lg:w-48 lg:h-48 xl:w-56 xl:h-56"
-        style={{ 
-          imageRendering: 'auto',
-          animation: gameState === 'correct' ? 'bonkBounce 1s ease-in-out' : 
-                    gameState === 'wrong' ? 'bonkPulse 0.5s ease-in-out' : 'none'
-        }}
-      />
-    </div>
-  );
-};
 
 // Multiplayer Section Component
 const MultiplayerSection = () => {
@@ -58,7 +35,10 @@ const BonkBlitz = () => {
   const [questionTimeLeft, setQuestionTimeLeft] = useState(5);
   const [gameQuestions, setGameQuestions] = useState([]);
   const [gameStartTime, setGameStartTime] = useState(null);
-  const [characterState, setCharacterState] = useState('idle');
+  
+  // Backrooms state
+  const [showBackrooms, setShowBackrooms] = useState(false);
+  const [dontClickClicked, setDontClickClicked] = useState(false);
 
   // Refs for timers
   const timerRef = useRef(null);
@@ -92,14 +72,10 @@ const BonkBlitz = () => {
     setIsAnswered(false);
     setSelectedAnswer(null);
     setGameStartTime(Date.now());
-    setCharacterState('playing');
     actions.startGame();
-    
-    // Reset character state after animation
-    setTimeout(() => setCharacterState('idle'), 2000);
   }, [shuffleQuestions, actions]);
 
-  // Answer selection with real data tracking and character reactions
+  // Answer selection with real data tracking
   const selectAnswer = useCallback((answerIndex) => {
     if (isAnswered || !currentQuestionData) return;
     
@@ -111,10 +87,6 @@ const BonkBlitz = () => {
     // Track question analytics
     actions.questionAsked(currentQuestionData.id);
     actions.questionAnswered(currentQuestionData.id, isCorrect);
-    
-    // Character reaction
-    setCharacterState(isCorrect ? 'correct' : 'wrong');
-    setTimeout(() => setCharacterState('idle'), 2000);
     
     if (isCorrect) {
       const timeBonus = questionTimeLeft * 100;
@@ -134,8 +106,6 @@ const BonkBlitz = () => {
       setQuestionTimeLeft(5);
       setIsAnswered(false);
       setSelectedAnswer(null);
-      setCharacterState('playing');
-      setTimeout(() => setCharacterState('idle'), 1000);
     } else {
       endGame();
     }
@@ -156,7 +126,6 @@ const BonkBlitz = () => {
     });
     
     setGameState('finished');
-    setCharacterState('finished');
   }, [gameStartTime, currentQuestionIndex, isAnswered, score, streak, actions]);
 
   // Reset game
@@ -173,8 +142,35 @@ const BonkBlitz = () => {
     setIsAnswered(false);
     setQuestionTimeLeft(5);
     setGameQuestions([]);
-    setCharacterState('idle');
   }, []);
+
+  // Handle don't click image click
+  const handleDontClickClick = async () => {
+    setDontClickClicked(true);
+    
+    // Enable audio context on user interaction
+    try {
+      // Create audio context to unlock audio playback
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioContext.state === 'suspended') {
+        await audioContext.resume();
+        console.log('Audio context resumed');
+      }
+    } catch (error) {
+      console.warn('Could not resume audio context:', error);
+    }
+    
+    // Add some suspense before showing backrooms
+    setTimeout(() => {
+      setShowBackrooms(true);
+    }, 1500);
+  };
+
+  // Exit backrooms
+  const exitBackrooms = () => {
+    setShowBackrooms(false);
+    setDontClickClicked(false);
+  };
 
   // Timer effects
   useEffect(() => {
@@ -211,9 +207,15 @@ const BonkBlitz = () => {
 
   // Memoized computed values
   const formattedScore = useMemo(() => score.toLocaleString(), [score]);
+  const formattedPrizePool = useMemo(() => state.gameStats.currentPrizePool.toFixed(3), [state.gameStats.currentPrizePool]);
   const questionProgress = useMemo(() => `${currentQuestionIndex + 1} / ${gameQuestions.length}`, [currentQuestionIndex, gameQuestions.length]);
   const accuracy = useMemo(() => gameQuestions.length > 0 ? Math.round((score / 1000) * 100 / gameQuestions.length) : 0, [score, gameQuestions.length]);
   const finalRank = useMemo(() => Math.floor(Math.random() * 10) + 1, []);
+
+  // Show backrooms if active
+  if (showBackrooms) {
+    return <BonkCyberBackrooms onExit={exitBackrooms} />;
+  }
 
   // Show loading if no questions available
   if (activeQuestions.length === 0) {
@@ -232,53 +234,27 @@ const BonkBlitz = () => {
 
   return (
     <div className="min-h-screen text-white overflow-x-hidden bg-bonk-gradient relative">
-      {/* BONK Characters - Only show during offline game states */}
-      {!state.liveGame.isActive && (
-        <>
-          {/* Left BONK Character */}
-          <BonkCharacter 
-            imageFile="BONK_Pose_ThumbsUp_001.png"
-            position="left-4 top-1/2 transform -translate-y-1/2" 
-            className="hidden xl:block"
-            animate={characterState === 'correct' || characterState === 'playing'}
-            gameState={characterState}
-          />
-          
-          {/* Right BONK Character */}
-          <BonkCharacter 
-            imageFile="BONK_Pose_ThumbsUp_002.png"
-            position="right-4 top-1/2 transform -translate-y-1/2" 
-            className="hidden xl:block"
-            animate={characterState === 'correct' || characterState === 'finished'}
-            gameState={characterState}
-          />
-          
-          {/* Smaller characters for medium screens */}
-          <BonkCharacter 
-            imageFile="BONK_Pose_ThumbsUp_001.png"
-            position="left-2 top-1/3" 
-            className="hidden lg:block xl:hidden"
-            animate={characterState === 'correct'}
-            gameState={characterState}
-          />
-          
-          <BonkCharacter 
-            imageFile="BONK_Pose_ThumbsUp_002.png"
-            position="right-2 top-2/3" 
-            className="hidden lg:block xl:hidden"
-            animate={characterState === 'correct'}
-            gameState={characterState}
-          />
-        </>
-      )}
-
-      {/* Header - Clean version without badges */}
+      {/* Header */}
       <header className="relative z-10 pt-20">
-        {/* Empty header space for logo */}
+        <div className="relative flex flex-col sm:flex-row justify-between items-center p-4 sm:p-6 gap-4">          
+          <div className="flex flex-wrap items-center gap-3 sm:gap-4 ml-auto">
+            <div className="bonk-badge flex items-center space-x-2">
+              <Users className="w-5 h-5" />
+              <span className="bonk-body font-bold text-sm sm:text-base">{state.liveGame.currentPlayers} PLAYERS</span>
+            </div>
+            <div className="bonk-badge flex items-center space-x-2">
+              <Coins className="w-5 h-5" />
+              <span className="bonk-body font-bold text-sm sm:text-base">{formattedPrizePool} SOL</span>
+            </div>
+            <div className="bonk-badge-gradient">
+              <span className="bonk-body font-bold text-sm">LIVE NOW</span>
+            </div>
+          </div>
+        </div>
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 min-h-[calc(100vh-100px)] relative z-20">
+      <main className="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 min-h-[calc(100vh-100px)]">
         {/* Multiplayer Section */}
         <MultiplayerSection />
 
@@ -288,93 +264,52 @@ const BonkBlitz = () => {
               <h2 className="bonk-header-spaced text-6xl sm:text-8xl lg:text-9xl mb-4 shadow-bonk-glow">
                 BONK BLITZ
               </h2>
-              <p className="bonk-body text-xl sm:text-2xl mb-2">Think Fast, Win Big</p>
+              <p className="bonk-body text-xl sm:text-2xl mb-2">Think Fast, Win SOL</p>
               <p className="bonk-body text-base sm:text-lg opacity-90">60 seconds • Lightning trivia • Epic rewards</p>
             </div>
 
-            {/* Ultra-Blended How to Play Section */}
-            <div className="relative mb-8">
-              {/* Subtle background enhancement that extends the main gradient */}
-              <div className="absolute inset-0 bg-gradient-to-br from-bonk-orange/8 via-transparent to-bonk-yellow/8 rounded-3xl blur-2xl transform scale-110"></div>
-              <div className="absolute inset-0 bg-gradient-to-tl from-bonk-yellow/5 via-transparent to-bonk-orange/5 rounded-3xl"></div>
+            {/* Updated How to Play Section with Better Blending */}
+            <div className="relative bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl p-6 sm:p-8 mb-8 shadow-bonk-lg">
+              {/* Gradient overlay for better blending */}
+              <div className="absolute inset-0 bg-gradient-to-br from-bonk-orange/10 via-bonk-yellow/5 to-transparent rounded-2xl"></div>
               
-              <div className="relative">
-                <h3 className="bonk-header text-2xl sm:text-3xl mb-8 text-center text-bonk-yellow drop-shadow-lg">HOW TO PLAY</h3>
-                
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8">
+              <div className="relative z-10">
+                <h3 className="bonk-header text-2xl sm:text-3xl mb-6 text-bonk-yellow">HOW TO PLAY</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
                   
-                  {/* Lightning Speed Card - Ultra Blended */}
-                  <div className="group relative overflow-hidden rounded-3xl transition-all duration-700 hover:scale-105 bonk-fade-in">
-                    {/* Multi-layer seamless blending */}
-                    <div className="absolute inset-0 bg-gradient-to-br from-bonk-orange/20 via-bonk-orange/10 to-transparent"></div>
-                    <div className="absolute inset-0 bg-gradient-to-tl from-bonk-yellow/15 via-transparent to-bonk-orange/8"></div>
-                    <div className="absolute inset-0 bg-white/5 backdrop-blur-sm"></div>
-                    
-                    {/* Animated glow effect */}
-                    <div className="absolute inset-0 bg-gradient-to-r from-bonk-orange/40 via-bonk-yellow/30 to-bonk-orange/40 rounded-3xl opacity-0 group-hover:opacity-30 transition-opacity duration-500 blur-xl"></div>
-                    
-                    <div className="relative p-8 text-center">
-                      {/* Glowing icon with multiple layers */}
-                      <div className="relative w-20 h-20 mx-auto mb-6">
-                        <div className="absolute inset-0 bg-bonk-orange/40 rounded-full blur-xl animate-pulse"></div>
-                        <div className="absolute inset-0 bg-gradient-to-br from-bonk-orange/50 to-bonk-orange/20 rounded-full"></div>
-                        <div className="relative bg-gradient-to-br from-bonk-orange/60 via-bonk-orange/40 to-bonk-orange/20 w-20 h-20 rounded-full flex items-center justify-center border-2 border-bonk-orange/50 shadow-2xl">
-                          <Timer className="w-10 h-10 text-white drop-shadow-lg" />
-                        </div>
+                  {/* Lightning Speed Card */}
+                  <div className="relative bg-gradient-to-br from-bonk-orange/20 via-bonk-yellow/10 to-transparent p-6 rounded-xl border border-bonk-orange/30 hover:border-bonk-orange/50 transition-all duration-300 group">
+                    <div className="absolute inset-0 bg-gradient-to-br from-bonk-orange/5 to-transparent rounded-xl opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                    <div className="relative z-10">
+                      <div className="bg-bonk-orange/30 w-16 h-16 rounded-full flex items-center justify-center mb-4 mx-auto border border-bonk-orange/40">
+                        <Timer className="w-8 h-8 text-bonk-orange" />
                       </div>
-                      
-                      <h4 className="bonk-header text-xl sm:text-2xl mb-3 text-white drop-shadow-lg">LIGHTNING SPEED</h4>
-                      <p className="bonk-body text-sm sm:text-base text-white/95 leading-relaxed">5 seconds per question. Think fast or get left behind!</p>
+                      <h4 className="bonk-header text-xl mb-2 text-bonk-yellow">LIGHTNING SPEED</h4>
+                      <p className="bonk-body text-sm text-white/90">5 seconds per question. Think fast!</p>
                     </div>
                   </div>
 
-                  {/* Streak Bonus Card - Ultra Blended */}
-                  <div className="group relative overflow-hidden rounded-3xl transition-all duration-700 hover:scale-105 bonk-fade-in" style={{animationDelay: '0.1s'}}>
-                    {/* Multi-layer seamless blending */}
-                    <div className="absolute inset-0 bg-gradient-to-br from-bonk-red/20 via-bonk-red/10 to-transparent"></div>
-                    <div className="absolute inset-0 bg-gradient-to-tl from-bonk-orange/15 via-transparent to-bonk-red/8"></div>
-                    <div className="absolute inset-0 bg-white/5 backdrop-blur-sm"></div>
-                    
-                    {/* Animated glow effect */}
-                    <div className="absolute inset-0 bg-gradient-to-r from-bonk-red/40 via-bonk-orange/30 to-bonk-red/40 rounded-3xl opacity-0 group-hover:opacity-30 transition-opacity duration-500 blur-xl"></div>
-                    
-                    <div className="relative p-8 text-center">
-                      {/* Glowing icon with multiple layers */}
-                      <div className="relative w-20 h-20 mx-auto mb-6">
-                        <div className="absolute inset-0 bg-bonk-red/40 rounded-full blur-xl animate-pulse"></div>
-                        <div className="absolute inset-0 bg-gradient-to-br from-bonk-red/50 to-bonk-red/20 rounded-full"></div>
-                        <div className="relative bg-gradient-to-br from-bonk-red/60 via-bonk-red/40 to-bonk-red/20 w-20 h-20 rounded-full flex items-center justify-center border-2 border-bonk-red/50 shadow-2xl">
-                          <Flame className="w-10 h-10 text-white drop-shadow-lg" />
-                        </div>
+                  {/* Streak Bonus Card */}
+                  <div className="relative bg-gradient-to-br from-bonk-red/20 via-bonk-orange/10 to-transparent p-6 rounded-xl border border-bonk-red/30 hover:border-bonk-red/50 transition-all duration-300 group">
+                    <div className="absolute inset-0 bg-gradient-to-br from-bonk-red/5 to-transparent rounded-xl opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                    <div className="relative z-10">
+                      <div className="bg-bonk-red/30 w-16 h-16 rounded-full flex items-center justify-center mb-4 mx-auto border border-bonk-red/40">
+                        <Flame className="w-8 h-8 text-bonk-red" />
                       </div>
-                      
-                      <h4 className="bonk-header text-xl sm:text-2xl mb-3 text-white drop-shadow-lg">STREAK BONUS</h4>
-                      <p className="bonk-body text-sm sm:text-base text-white/95 leading-relaxed">Chain correct answers for massive point multipliers!</p>
+                      <h4 className="bonk-header text-xl mb-2 text-bonk-yellow">STREAK BONUS</h4>
+                      <p className="bonk-body text-sm text-white/90">Chain correct answers for mega points!</p>
                     </div>
                   </div>
 
-                  {/* Win Big Card - Ultra Blended */}
-                  <div className="group relative overflow-hidden rounded-3xl transition-all duration-700 hover:scale-105 bonk-fade-in" style={{animationDelay: '0.2s'}}>
-                    {/* Multi-layer seamless blending */}
-                    <div className="absolute inset-0 bg-gradient-to-br from-bonk-yellow/20 via-bonk-yellow/10 to-transparent"></div>
-                    <div className="absolute inset-0 bg-gradient-to-tl from-bonk-orange/15 via-transparent to-bonk-yellow/8"></div>
-                    <div className="absolute inset-0 bg-white/5 backdrop-blur-sm"></div>
-                    
-                    {/* Animated glow effect */}
-                    <div className="absolute inset-0 bg-gradient-to-r from-bonk-yellow/40 via-bonk-orange/30 to-bonk-yellow/40 rounded-3xl opacity-0 group-hover:opacity-30 transition-opacity duration-500 blur-xl"></div>
-                    
-                    <div className="relative p-8 text-center">
-                      {/* Glowing icon with multiple layers */}
-                      <div className="relative w-20 h-20 mx-auto mb-6">
-                        <div className="absolute inset-0 bg-bonk-yellow/40 rounded-full blur-xl animate-pulse"></div>
-                        <div className="absolute inset-0 bg-gradient-to-br from-bonk-yellow/50 to-bonk-yellow/20 rounded-full"></div>
-                        <div className="relative bg-gradient-to-br from-bonk-yellow/60 via-bonk-yellow/40 to-bonk-yellow/20 w-20 h-20 rounded-full flex items-center justify-center border-2 border-bonk-yellow/50 shadow-2xl">
-                          <Trophy className="w-10 h-10 text-white drop-shadow-lg" />
-                        </div>
+                  {/* Win Big Card */}
+                  <div className="relative bg-gradient-to-br from-bonk-yellow/20 via-bonk-orange/10 to-transparent p-6 rounded-xl border border-bonk-yellow/30 hover:border-bonk-yellow/50 transition-all duration-300 group">
+                    <div className="absolute inset-0 bg-gradient-to-br from-bonk-yellow/5 to-transparent rounded-xl opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                    <div className="relative z-10">
+                      <div className="bg-bonk-yellow/30 w-16 h-16 rounded-full flex items-center justify-center mb-4 mx-auto border border-bonk-yellow/40">
+                        <Trophy className="w-8 h-8 text-bonk-yellow" />
                       </div>
-                      
-                      <h4 className="bonk-header text-xl sm:text-2xl mb-3 text-white drop-shadow-lg">WIN BIG</h4>
-                      <p className="bonk-body text-sm sm:text-base text-white/95 leading-relaxed">Top players split the prize pool. Every game counts!</p>
+                      <h4 className="bonk-header text-xl mb-2 text-bonk-yellow">WIN BIG</h4>
+                      <p className="bonk-body text-sm text-white/90">Top players split the prize pool!</p>
                     </div>
                   </div>
 
@@ -510,11 +445,11 @@ const BonkBlitz = () => {
               <div className="bg-bonk-orange/10 p-6 rounded-xl border border-bonk-orange">
                 <h3 className="bonk-header text-2xl mb-3 text-bonk-yellow">YOUR EPIC RANKING</h3>
                 <p className="bonk-header text-3xl sm:text-4xl mb-2">
-                  #{finalRank} OUT OF 42 PLAYERS
+                  #{finalRank} OUT OF {state.liveGame.currentPlayers} PLAYERS
                 </p>
                 <p className="bonk-body text-sm text-gray-300">
                   <Award className="w-4 h-4 inline mr-1" />
-                  GAMES PLAYED TODAY: 156
+                  GAMES PLAYED TODAY: {state.gameStats.gamesPlayedToday}
                 </p>
               </div>
             </div>
@@ -529,6 +464,34 @@ const BonkBlitz = () => {
           </div>
         )}
       </main>
+
+      {/* Don't Click Image - Bottom of Screen - MADE BIGGER */}
+      <div className="fixed bottom-4 right-4 z-50">
+        {dontClickClicked ? (
+          <div className="relative">
+            <div className="text-red-500 text-lg font-bold animate-pulse">
+              ⚠️ ACCESSING RESTRICTED AREA... ⚠️
+            </div>
+            <div className="text-sm text-gray-400 text-center">
+              Initiating BONK Protocol...
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={handleDontClickClick}
+            className="group relative hover:scale-105 transition-all duration-300 filter hover:brightness-110"
+            title="Click if you dare..."
+          >
+            <img 
+              src="/Don_t_Click-removebg-preview.png" 
+              alt="Don't Click" 
+              className="w-48 h-48 sm:w-56 sm:h-56 md:w-64 md:h-64 lg:w-72 lg:h-72 drop-shadow-lg group-hover:drop-shadow-2xl transition-all duration-300"
+            />
+            {/* Glow effect on hover */}
+            <div className="absolute inset-0 bg-red-500/20 rounded-full blur-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 -z-10"></div>
+          </button>
+        )}
+      </div>
     </div>
   );
 };
